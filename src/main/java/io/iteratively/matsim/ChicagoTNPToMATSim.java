@@ -45,16 +45,23 @@ public class ChicagoTNPToMATSim {
         Options options = new Options();
         options.addRequiredOption("t", "token", true, "API token for accessing Chicago TNP data");
         options.addRequiredOption("w", "workdir", true, "Working directory to write plans.xml and cache pages");
-        options.addRequiredOption("d", "start-date", true, "Start date in format YYYY-MM-DD");
+        options.addRequiredOption("d", "date", true, "Date in format YYYY-MM-DD");
         options.addRequiredOption("e", "epsg", true, "EPSG code for coordinate system");
+        options.addOption("c", "tract", true, "Census tract file. Please download at https://www.census.gov/geo/maps-data/geo.html");
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
 
         String token = cmd.getOptionValue("token");
         Path workdir = Paths.get(cmd.getOptionValue("workdir"));
-        String startDateStr = cmd.getOptionValue("start-date");
+        String startDateStr = cmd.getOptionValue("date");
         String epsg = cmd.getOptionValue("epsg");
+        String censusTractFile = cmd.getOptionValue("tract");
+
+        TractCoordSampler sampler = null;
+        if (censusTractFile != null) {
+            sampler = new TractCoordSampler(Paths.get(censusTractFile).toFile(), "GEOID");
+        }
 
         CoordinateTransformation transformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, epsg);
 
@@ -75,12 +82,12 @@ public class ChicagoTNPToMATSim {
 
             if (Files.exists(cacheFile)) {
                 json = Files.readString(cacheFile);
-                System.out.println("Loaded cached page: " + cacheFile);
+                LOG.info("Loaded cached page: {}", cacheFile);
             } else {
                 String url = buildUrl(startDateStr, endDate.toString(), PAGE_LIMIT, offset);
                 json = ChicagoTNPDownloader.downloadFromUrl(url, token);
                 Files.writeString(cacheFile, json);
-                System.out.println("Downloaded and cached page: " + cacheFile);
+                LOG.info("Downloaded and cached page: {}", cacheFile);
             }
 
             JSONArray trips = new JSONArray(json);
@@ -95,11 +102,19 @@ public class ChicagoTNPToMATSim {
                     double endLat = trip.getDouble("dropoff_centroid_latitude");
                     double endLon = trip.getDouble("dropoff_centroid_longitude");
                     String startTime = trip.getString("trip_start_timestamp");
+                    String pickupCensusTract = trip.getString("pickup_census_tract");
+                    String dropoffCensusTract = trip.getString("dropoff_census_tract");
 
                     Person person = population.getFactory().createPerson(Id.createPersonId(tripId));
                     Plan plan = PopulationUtils.createPlan();
 
-                    Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(new Coord(startLon, startLat), transformation));
+                    Coord pickupCoord = null;
+                    if(sampler != null) {
+                        pickupCoord = sampler.getRandomCoordInTract(pickupCensusTract);
+                    } else {
+                        pickupCoord = new Coord(startLon, startLat);
+                    }
+                    Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(pickupCoord, transformation));
                     start.setEndTime(parseTime(startTime));
                     plan.addActivity(start);
 
@@ -117,7 +132,14 @@ public class ChicagoTNPToMATSim {
 
                     plan.addLeg(leg);
 
-                    Activity end = PopulationUtils.createActivityFromCoord("work", getTransformedCoord(new Coord(endLon, endLat), transformation));
+                    Coord dropOffCoord = null;
+                    if(sampler != null) {
+                        dropOffCoord = sampler.getRandomCoordInTract(dropoffCensusTract);
+                    } else {
+                        dropOffCoord = new Coord(endLon, endLat);
+                    }
+
+                    Activity end = PopulationUtils.createActivityFromCoord("work", getTransformedCoord(dropOffCoord, transformation));
                     plan.addActivity(end);
 
                     person.addPlan(plan);
