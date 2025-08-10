@@ -10,14 +10,9 @@ public class ChicagoTNPDownloader {
 
     private static final HttpClient client = HttpClient.newHttpClient();
 
-    public static String downloadTrips(String token, int limit, int offset) throws IOException, InterruptedException {
-        String apiUrl = String.format(
-                "https://data.cityofchicago.org/resource/6dvr-xwnh.json?$limit=%d&$offset=%d",
-                limit, offset
-        );
-
+    public static String downloadFromUrl(String url, String token) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
+                .uri(URI.create(url))
                 .header("X-App-Token", token)
                 .GET()
                 .build();

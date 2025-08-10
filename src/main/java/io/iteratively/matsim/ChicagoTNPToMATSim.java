@@ -1,5 +1,6 @@
 package io.iteratively.matsim;
 
+import org.apache.commons.cli.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.matsim.api.core.v01.*;
@@ -8,44 +9,112 @@ import org.matsim.core.population.PopulationUtils;
 import org.matsim.core.population.io.PopulationWriter;
 import org.matsim.core.scenario.ScenarioUtils;
 import org.matsim.core.config.ConfigUtils;
+import org.matsim.core.utils.geometry.CoordinateTransformation;
+import org.matsim.core.utils.geometry.transformations.TransformationFactory;
+
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 
 public class ChicagoTNPToMATSim {
+    private static final int PAGE_LIMIT = 50_000;
+    private static final String BASE_URL = "https://data.cityofchicago.org/resource/6dvr-xwnh.json";
+
+
+    public static String buildUrl(String startDate, String endDate, int limit, int offset) {
+        String whereClause = String.format(
+                "trip_start_timestamp >= '%sT00:00:00' AND trip_start_timestamp < '%sT00:00:00'",
+                startDate, endDate
+        );
+        String encodedWhere = URLEncoder.encode(whereClause, StandardCharsets.UTF_8);
+
+        return String.format(
+                "%s?$where=%s&$order=trip_start_timestamp%%20ASC&$limit=%d&$offset=%d",
+                BASE_URL, encodedWhere, limit, offset
+        );
+    }
+
+
+
 
     public static void main(String[] args) throws Exception {
-        String token = "YOUR_TOKEN_HERE";
-        int limit = 1000;
+        Options options = new Options();
+        options.addRequiredOption("t", "token", true, "API token for accessing Chicago TNP data");
+        options.addRequiredOption("w", "workdir", true, "Working directory to write plans.xml and cache pages");
+        options.addRequiredOption("d", "start-date", true, "Start date in format YYYY-MM-DD");
+        options.addRequiredOption("e", "epsg", true, "EPSG code for coordinate system");
+
+        CommandLineParser parser = new DefaultParser();
+        CommandLine cmd = parser.parse(options, args);
+
+        String token = cmd.getOptionValue("token");
+        Path workdir = Paths.get(cmd.getOptionValue("workdir"));
+        String startDateStr = cmd.getOptionValue("start-date");
+        String epsg = cmd.getOptionValue("epsg");
+
+        Files.createDirectories(workdir);
+
+        LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate endDate = startDate.plusDays(1);
+
         int offset = 0;
-        int agentId = 1;
+        int page = 0;
 
         Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         Population population = scenario.getPopulation();
 
         while (true) {
-            String json = ChicagoTNPDownloader.downloadTrips(token, limit, offset);
+            Path cacheFile = workdir.resolve(String.format("day_%s_page_%03d.json", startDateStr, page));
+            String json;
+
+            if (Files.exists(cacheFile)) {
+                json = Files.readString(cacheFile);
+                System.out.println("Loaded cached page: " + cacheFile);
+            } else {
+                String url = buildUrl(startDateStr, endDate.toString(), PAGE_LIMIT, offset);
+                json = ChicagoTNPDownloader.downloadFromUrl(url, token);
+                Files.writeString(cacheFile, json);
+                System.out.println("Downloaded and cached page: " + cacheFile);
+            }
+
             JSONArray trips = new JSONArray(json);
-            if (trips.length() == 0) break;
+            if (trips.isEmpty()) break;
 
             for (int i = 0; i < trips.length(); i++) {
                 JSONObject trip = trips.getJSONObject(i);
                 try {
+                    String tripId = trip.getString("trip_id");
                     double startLat = trip.getDouble("pickup_centroid_latitude");
                     double startLon = trip.getDouble("pickup_centroid_longitude");
                     double endLat = trip.getDouble("dropoff_centroid_latitude");
                     double endLon = trip.getDouble("dropoff_centroid_longitude");
                     String startTime = trip.getString("trip_start_timestamp");
 
-                    Person person = population.getFactory().createPerson(Id.createPersonId("agent_" + agentId++));
+                    Person person = population.getFactory().createPerson(Id.createPersonId(tripId));
                     Plan plan = PopulationUtils.createPlan();
 
-                    Activity start = PopulationUtils.createActivityFromCoord("home", new Coord(startLon, startLat));
+                    Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(new Coord(startLon, startLat),epsg));
                     start.setEndTime(parseTime(startTime));
                     plan.addActivity(start);
 
                     Leg leg = PopulationUtils.createLeg("drt");
+
+                    // Enrich with some attributes for later statistics
+                    leg.getAttributes().putAttribute("distance_miles", trip.optDouble("trip_miles", 0.0));
+                    leg.getAttributes().putAttribute("fare", trip.optDouble("fare", 0.0));
+                    leg.getAttributes().putAttribute("tip", trip.optDouble("tip", 0.0));
+                    leg.getAttributes().putAttribute("additional_charges", trip.optDouble("additional_charges", 0.0));
+                    leg.getAttributes().putAttribute("trip_total", trip.optDouble("trip_total", 0.0));
+                    leg.getAttributes().putAttribute("trips_pooled", trip.optString("trips_pooled", "0"));
+                    leg.getAttributes().putAttribute("shared_trip_match", trip.optBoolean("shared_trip_match", false));
+                    leg.getAttributes().putAttribute("shared_trip_authorized", trip.optBoolean("shared_trip_authorized", false));
+
                     plan.addLeg(leg);
 
-                    Activity end = PopulationUtils.createActivityFromCoord("work", new Coord(endLon, endLat));
+                    Activity end = PopulationUtils.createActivityFromCoord("work", getTransformedCoord(new Coord(endLon, endLat),epsg));
                     plan.addActivity(end);
 
                     person.addPlan(plan);
@@ -56,12 +125,18 @@ public class ChicagoTNPToMATSim {
                 }
             }
 
-            offset += limit;
-            System.out.println("Loaded " + offset + " trips...");
+            offset += PAGE_LIMIT;
+            page++;
+            System.out.println("Processed " + offset + " trips...");
         }
 
-        new PopulationWriter(population).write("output/plans.xml");
-        System.out.println("Finished writing plans.xml");
+        new PopulationWriter(population).write(workdir.resolve("plans_" + startDateStr + ".xml.gz").toString());
+        System.out.println("Finished writing plans_" + startDateStr + ".xml");
+    }
+
+    static Coord getTransformedCoord(Coord coord, String epsg) {
+        CoordinateTransformation transformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, epsg);
+        return transformation.transform(coord);
     }
 
     private static double parseTime(String timestamp) {
