@@ -1,6 +1,8 @@
 package io.iteratively.matsim;
 
 import org.apache.commons.cli.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.matsim.api.core.v01.*;
@@ -20,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 
 
 public class ChicagoTNPToMATSim {
+    private static final Logger LOG = LogManager.getLogger(ChicagoTNPToMATSim.class);
     private static final int PAGE_LIMIT = 50_000;
     private static final String BASE_URL = "https://data.cityofchicago.org/resource/6dvr-xwnh.json";
 
@@ -38,8 +41,6 @@ public class ChicagoTNPToMATSim {
     }
 
 
-
-
     public static void main(String[] args) throws Exception {
         Options options = new Options();
         options.addRequiredOption("t", "token", true, "API token for accessing Chicago TNP data");
@@ -54,6 +55,8 @@ public class ChicagoTNPToMATSim {
         Path workdir = Paths.get(cmd.getOptionValue("workdir"));
         String startDateStr = cmd.getOptionValue("start-date");
         String epsg = cmd.getOptionValue("epsg");
+
+        CoordinateTransformation transformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, epsg);
 
         Files.createDirectories(workdir);
 
@@ -96,7 +99,7 @@ public class ChicagoTNPToMATSim {
                     Person person = population.getFactory().createPerson(Id.createPersonId(tripId));
                     Plan plan = PopulationUtils.createPlan();
 
-                    Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(new Coord(startLon, startLat),epsg));
+                    Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(new Coord(startLon, startLat), transformation));
                     start.setEndTime(parseTime(startTime));
                     plan.addActivity(start);
 
@@ -114,28 +117,28 @@ public class ChicagoTNPToMATSim {
 
                     plan.addLeg(leg);
 
-                    Activity end = PopulationUtils.createActivityFromCoord("work", getTransformedCoord(new Coord(endLon, endLat),epsg));
+                    Activity end = PopulationUtils.createActivityFromCoord("work", getTransformedCoord(new Coord(endLon, endLat), transformation));
                     plan.addActivity(end);
 
                     person.addPlan(plan);
                     population.addPerson(person);
 
                 } catch (Exception e) {
-                    System.out.println("Skipping trip due to missing data: " + e.getMessage());
+                    LOG.debug("Skipping trip due to missing data: {}", e.getMessage());
                 }
             }
 
             offset += PAGE_LIMIT;
             page++;
-            System.out.println("Processed " + offset + " trips...");
+            LOG.debug("Processed {} trips...", offset);
         }
 
-        new PopulationWriter(population).write(workdir.resolve("plans_" + startDateStr + ".xml.gz").toString());
-        System.out.println("Finished writing plans_" + startDateStr + ".xml");
+        String plansFile = workdir.resolve("plans_" + startDateStr + ".xml.gz").toString();
+        new PopulationWriter(population).write(plansFile);
+        LOG.info("Finished writing {}", plansFile);
     }
 
-    static Coord getTransformedCoord(Coord coord, String epsg) {
-        CoordinateTransformation transformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, epsg);
+    static Coord getTransformedCoord(Coord coord, CoordinateTransformation transformation) {
         return transformation.transform(coord);
     }
 

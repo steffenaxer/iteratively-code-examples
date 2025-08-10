@@ -37,5 +37,25 @@
             <artifactId>commons-cli</artifactId>
             <version>1.10.0</version>
         </dependency>
+        <!-- Log4j API -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>2.21.0</version>
+        </dependency>
+
+        <!-- Log4j Core -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.21.0</version>
+        </dependency>
+
+        <!-- Optional: SLF4J Binding (falls du SLF4J nutzt) -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.21.0</version>
+        </dependency>
     </dependencies>
 </project>
