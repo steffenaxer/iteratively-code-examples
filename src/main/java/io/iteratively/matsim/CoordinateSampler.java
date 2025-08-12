@@ -14,12 +14,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
-public class TractCoordSampler {
+public class CoordinateSampler {
 
     private final Map<String, Geometry> tractGeometries = new HashMap<>();
     private final Random random = MatsimRandom.getRandom();
 
-    public TractCoordSampler(File shapefile, String tractIdAttribute) {
+    public CoordinateSampler(File shapefile, String tractIdAttribute) {
         var featureSource = GeoFileReader.readDataFile(shapefile.getAbsolutePath(), new NameImpl(tractIdAttribute));
         try (FeatureIterator<SimpleFeature> features = featureSource.getFeatures().features()) {
             while (features.hasNext()) {

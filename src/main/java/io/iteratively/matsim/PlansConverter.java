@@ -21,11 +21,10 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 
-public class ChicagoTNPToMATSim {
-    private static final Logger LOG = LogManager.getLogger(ChicagoTNPToMATSim.class);
+public class PlansConverter {
+    private static final Logger LOG = LogManager.getLogger(PlansConverter.class);
     private static final int PAGE_LIMIT = 50_000;
     private static final String BASE_URL = "https://data.cityofchicago.org/resource/6dvr-xwnh.json";
-
 
     public static String buildUrl(String startDate, String endDate, int limit, int offset) {
         String whereClause = String.format(
@@ -58,9 +57,9 @@ public class ChicagoTNPToMATSim {
         String epsg = cmd.getOptionValue("epsg");
         String censusTractFile = cmd.getOptionValue("tract");
 
-        TractCoordSampler sampler = null;
+        CoordinateSampler sampler = null;
         if (censusTractFile != null) {
-            sampler = new TractCoordSampler(Paths.get(censusTractFile).toFile(), "GEOID");
+            sampler = new CoordinateSampler(Paths.get(censusTractFile).toFile(), "GEOID");
         }
 
         CoordinateTransformation transformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, epsg);
@@ -85,7 +84,7 @@ public class ChicagoTNPToMATSim {
                 LOG.info("Loaded cached page: {}", cacheFile);
             } else {
                 String url = buildUrl(startDateStr, endDate.toString(), PAGE_LIMIT, offset);
-                json = ChicagoTNPDownloader.downloadFromUrl(url, token);
+                json = TripLoader.downloadFromUrl(url, token);
                 Files.writeString(cacheFile, json);
                 LOG.info("Downloaded and cached page: {}", cacheFile);
             }

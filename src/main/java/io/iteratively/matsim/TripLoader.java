@@ -6,7 +6,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
-public class ChicagoTNPDownloader {
+public class TripLoader {
 
     private static final HttpClient client = HttpClient.newHttpClient();
 
