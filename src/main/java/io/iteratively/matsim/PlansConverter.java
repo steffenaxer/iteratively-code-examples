@@ -14,6 +14,7 @@ import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.utils.geometry.CoordinateTransformation;
 import org.matsim.core.utils.geometry.transformations.TransformationFactory;
 
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -27,18 +28,11 @@ public class PlansConverter {
     private static final String BASE_URL = "https://data.cityofchicago.org/resource/6dvr-xwnh.json";
 
     public static String buildUrl(String startDate, String endDate, int limit, int offset) {
-        String whereClause = String.format(
-                "trip_start_timestamp >= '%sT00:00:00' AND trip_start_timestamp < '%sT00:00:00'",
-                startDate, endDate
-        );
+        String whereClause = String.format("trip_start_timestamp >= '%sT00:00:00' AND trip_start_timestamp < '%sT00:00:00'", startDate, endDate);
         String encodedWhere = URLEncoder.encode(whereClause, StandardCharsets.UTF_8);
 
-        return String.format(
-                "%s?$where=%s&$order=trip_start_timestamp%%20ASC&$limit=%d&$offset=%d",
-                BASE_URL, encodedWhere, limit, offset
-        );
+        return String.format("%s?$where=%s&$order=trip_start_timestamp%%20ASC&$limit=%d&$offset=%d", BASE_URL, encodedWhere, limit, offset);
     }
-
 
     public static void main(String[] args) throws Exception {
         Options options = new Options();
@@ -57,6 +51,10 @@ public class PlansConverter {
         String epsg = cmd.getOptionValue("epsg");
         String censusTractFile = cmd.getOptionValue("tract");
 
+        run(token, workdir, startDateStr, epsg, censusTractFile);
+    }
+
+    public static void run(String token, Path workdir, String startDateStr, String epsg, String censusTractFile) throws IOException, InterruptedException {
         CoordinateSampler sampler = null;
         if (censusTractFile != null) {
             sampler = new CoordinateSampler(Paths.get(censusTractFile).toFile(), "GEOID");
@@ -108,7 +106,7 @@ public class PlansConverter {
                     Plan plan = PopulationUtils.createPlan();
 
                     Coord pickupCoord = null;
-                    if(sampler != null) {
+                    if (sampler != null) {
                         pickupCoord = sampler.getRandomCoordInTract(pickupCensusTract);
                     } else {
                         pickupCoord = new Coord(startLon, startLat);
@@ -132,7 +130,7 @@ public class PlansConverter {
                     plan.addLeg(leg);
 
                     Coord dropOffCoord = null;
-                    if(sampler != null) {
+                    if (sampler != null) {
                         dropOffCoord = sampler.getRandomCoordInTract(dropoffCensusTract);
                     } else {
                         dropOffCoord = new Coord(endLon, endLat);
@@ -154,7 +152,7 @@ public class PlansConverter {
             LOG.debug("Processed {} trips...", offset);
         }
 
-        String plansFile = workdir.resolve("plans_" + startDateStr + ".xml.gz").toString();
+        String plansFile = workdir.resolve("plans" + ".xml.gz").toString();
         new PopulationWriter(population).write(plansFile);
         LOG.info("Finished writing {}", plansFile);
     }
