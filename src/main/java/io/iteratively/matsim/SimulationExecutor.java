@@ -21,6 +21,7 @@ import org.matsim.core.config.groups.ScoringConfigGroup;
 import org.matsim.core.controler.Controler;
 import org.matsim.core.controler.OutputDirectoryHierarchy;
 import org.matsim.core.network.NetworkUtils;
+import org.matsim.vis.otfvis.OTFVisConfigGroup;
 
 import java.nio.file.Path;
 
@@ -47,7 +48,7 @@ public class SimulationExecutor {
         String configFilePath = cmd.getOptionValue("c");
         String outputDir = cmd.getOptionValue("o");
 
-        Config config = ConfigUtils.loadConfig(configFilePath);
+        Config config = ConfigUtils.loadConfig(configFilePath, new MultiModeDrtConfigGroup(DrtWithExtensionsConfigGroup::new), new DvrpConfigGroup());
         config.controller().setOutputDirectory(outputDir);
 
         Controler controller = DrtControlerCreator.createControler(config, false);

@@ -68,20 +68,20 @@ public class NetworkConverter {
         double xmax = Double.parseDouble(cmd.getOptionValue("xmax"));
         double ymax = Double.parseDouble(cmd.getOptionValue("ymax"));
 
-        NetworkConverter.createDefaultMATSimNetwork(workdir, url, key, epsg, xmin, ymin, xmax, ymax);
+        NetworkConverter.createDefaultMATSimNetwork(workdir, url, key, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
     }
 
-    public static void createDefaultMATSimNetwork(Path workDir, URL osmPbfUrl, String networkKey, String scenarioEPSG, double xmin, double ymin, double xmax, double ymax) throws MalformedURLException, URISyntaxException {
+    public static void createDefaultMATSimNetwork(Path workDir, URL osmPbfUrl, String networkKey, String scenarioEPSG, double xmin, double ymin, double xmax, double ymax, String drtMode) {
         String filename = Paths.get(osmPbfUrl.getPath()).getFileName().toString();
         File osmFile = workDir.resolve(filename).toFile();
         downloadUrl(osmPbfUrl, osmFile);
         String bboxPbfFile = workDir.resolve(networkKey + ".bbox.osm.pbf").toString();
         getPbfForBBox(osmFile.toString(), bboxPbfFile, xmin, ymin, xmax, ymax);
         String outputNetworkFilePath = workDir.resolve(networkKey + ".network.xml.gz").toString();
-        createDefaultMATSimNetwork(bboxPbfFile, outputNetworkFilePath, scenarioEPSG);
+        createDefaultMATSimNetwork(bboxPbfFile, outputNetworkFilePath, scenarioEPSG, drtMode);
     }
 
-    private static void createDefaultMATSimNetwork(String osmPbfFile, String outputNetworkFilePath, String utmEpsg) {
+    private static void createDefaultMATSimNetwork(String osmPbfFile, String outputNetworkFilePath, String utmEpsg, String drtMode) {
         CoordinateTransformation coordinateTransformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, utmEpsg);
         Set<String> defaultModes = Set.of(TransportMode.car, TransportMode.bike);
         Network network = new SupersonicOsmNetworkReader.Builder()
@@ -92,6 +92,13 @@ public class NetworkConverter {
                 .build()
                 .read(osmPbfFile);
         NetworkUtils.cleanNetwork(network, Set.of(TransportMode.car));
+        network.getLinks().values().stream()
+                .filter(link -> link.getAllowedModes().contains(TransportMode.car))
+                .forEach(link -> {
+                    Set<String> modes = new HashSet<>(link.getAllowedModes());
+                    modes.add(drtMode);
+                    link.setAllowedModes(modes);
+                });
         new NetworkWriter(network).write(outputNetworkFilePath);
     }
 

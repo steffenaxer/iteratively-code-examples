@@ -5,6 +5,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
 import org.matsim.api.core.v01.Id;
+import org.matsim.api.core.v01.TransportMode;
 import org.matsim.api.core.v01.network.Network;
 import org.matsim.contrib.common.zones.systems.grid.square.SquareGridZoneSystemParams;
 import org.matsim.contrib.drt.extension.DrtWithExtensionsConfigGroup;
@@ -12,7 +13,6 @@ import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsPa
 import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsSetImpl;
 import org.matsim.contrib.drt.optimizer.insertion.repeatedselective.RepeatedSelectiveInsertionSearchParams;
 import org.matsim.contrib.drt.run.DrtConfigGroup;
-import org.matsim.contrib.drt.run.DrtControlerCreator;
 import org.matsim.contrib.drt.run.MultiModeDrtConfigGroup;
 import org.matsim.contrib.dvrp.run.DvrpConfigGroup;
 import org.matsim.core.config.Config;
@@ -27,6 +27,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Set;
 
 /**
  * @author steffenaxer
@@ -40,6 +41,7 @@ public class ScenarioCreator {
         options.addRequiredOption("e", "epsg", true, "EPSG code");
         options.addRequiredOption("d", "date", true, "Date for TNP data (YYYY-MM-DD)");
         options.addRequiredOption("t", "token", true, "API token for Chicago TNP");
+        options.addRequiredOption("bbox", "bbox", true, "Bounding box as xmin,ymin,xmax,ymax");
         options.addOption("c", "tract", true, "Census tract file. Please download at https://www.census.gov/geo/maps-data/geo.html");
 
 
@@ -59,29 +61,32 @@ public class ScenarioCreator {
         Path fleetDir = workDir.resolve("fleet");
         Path outputDir = workDir.resolve("output");
 
+        String[] bboxParts = cmd.getOptionValue("bbox").split(",");
+        if (bboxParts.length != 4) {
+            throw new IllegalArgumentException("Bounding box must have 4 comma-separated values: xmin,ymin,xmax,ymax");
+        }
+        double xmin = Double.parseDouble(bboxParts[0]);
+        double ymin = Double.parseDouble(bboxParts[1]);
+        double xmax = Double.parseDouble(bboxParts[2]);
+        double ymax = Double.parseDouble(bboxParts[3]);
+
+
         Files.createDirectories(networkDir);
         Files.createDirectories(plansDir);
         Files.createDirectories(fleetDir);
         Files.createDirectories(outputDir);
 
-        // 1. Netzwerk erstellen
-        NetworkConverter.createDefaultMATSimNetwork(
-                networkDir, osmUrl, networkKey, epsg,
-                -87.9401, 41.6445, -87.5241, 42.0230 // Beispiel: Chicago Bounding Box
-        );
-
+        NetworkConverter.createDefaultMATSimNetwork(networkDir, osmUrl, networkKey, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
         PlansConverter.run(token, plansDir, date, epsg, tract);
 
-        // 3. Config vorbereiten
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
         String plansFile = plansDir.resolve("plans.xml.gz").toString();
         String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
         Config config = prepareConfig(networkFile, 2000, 24 * 3600, 2, fleetFile);
-        ConfigUtils.writeConfig(config, String.valueOf(workDir.resolve("config.xml")));
         config.network().setInputFile(networkFile);
         config.plans().setInputFile(plansFile);
         config.controller().setOutputDirectory(outputDir.toString());
-
+        ConfigUtils.writeConfig(config, String.valueOf(workDir.resolve("config.xml")));
     }
 
     public static Config prepareConfig(String networkFile, int numberOfVehicles, double endTime, int iterations, String fleetFile) {
@@ -90,7 +95,9 @@ public class ScenarioCreator {
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(iterations);
 
-        config.addModule(new DvrpConfigGroup());
+        DvrpConfigGroup dvrpConfigGroup = new DvrpConfigGroup();
+        dvrpConfigGroup.setNetworkModes(Set.of(TransportMode.car, TransportMode.drt));
+        config.addModule(dvrpConfigGroup);
         config.qsim().setSimStarttimeInterpretation(QSimConfigGroup.StarttimeInterpretation.onlyUseStarttime);
         config.global().setNumberOfThreads(4);
         config.qsim().setEndTime(endTime);
@@ -101,6 +108,8 @@ public class ScenarioCreator {
 
         MultiModeDrtConfigGroup multiModeDrtConfigGroup = new MultiModeDrtConfigGroup();
         DrtWithExtensionsConfigGroup drtConfig = new DrtWithExtensionsConfigGroup();
+        drtConfig.setUseModeFilteredSubnetwork(true);
+        drtConfig.setMode(TransportMode.drt);
         drtConfig.setVehiclesFile(fleet.toString());
         drtConfig.setStopDuration(30);
         drtConfig.addParameterSet(new RepeatedSelectiveInsertionSearchParams());
@@ -115,8 +124,9 @@ public class ScenarioCreator {
 
         SquareGridZoneSystemParams zoneParams = new SquareGridZoneSystemParams();
         zoneParams.setCellSize(500);
+        drtConfig.addParameterSet(zoneParams);
 
-        drtConfig.setNumberOfThreads(4);
+        drtConfig.setNumberOfThreads(6);
         drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
         config.addModule(multiModeDrtConfigGroup);
 
