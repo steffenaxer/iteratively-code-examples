@@ -11,10 +11,12 @@ import org.matsim.contrib.common.zones.systems.grid.square.SquareGridZoneSystemP
 import org.matsim.contrib.drt.extension.DrtWithExtensionsConfigGroup;
 import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsParams;
 import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsSetImpl;
+import org.matsim.contrib.drt.optimizer.insertion.parallel.DrtParallelInserterParams;
 import org.matsim.contrib.drt.optimizer.insertion.repeatedselective.RepeatedSelectiveInsertionSearchParams;
 import org.matsim.contrib.drt.run.DrtConfigGroup;
 import org.matsim.contrib.drt.run.MultiModeDrtConfigGroup;
 import org.matsim.contrib.dvrp.run.DvrpConfigGroup;
+import org.matsim.contrib.zone.skims.DvrpTravelTimeMatrixParams;
 import org.matsim.core.config.Config;
 import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.config.groups.QSimConfigGroup;
@@ -97,14 +99,24 @@ public class ScenarioCreator {
 
         DvrpConfigGroup dvrpConfigGroup = new DvrpConfigGroup();
         dvrpConfigGroup.setNetworkModes(Set.of(TransportMode.car, TransportMode.drt));
+
+        // Resolution to estimate travel times
+        DvrpTravelTimeMatrixParams dvrpTravelTimeMatrixParams = new DvrpTravelTimeMatrixParams();
+        dvrpTravelTimeMatrixParams.setMaxNeighborDistance(0);
+        SquareGridZoneSystemParams dvrpZones = new SquareGridZoneSystemParams();
+        dvrpZones.setCellSize(1000);
+        dvrpTravelTimeMatrixParams.addParameterSet(dvrpZones);
+        dvrpConfigGroup.addParameterSet(dvrpTravelTimeMatrixParams);
         config.addModule(dvrpConfigGroup);
+
+
         config.qsim().setSimStarttimeInterpretation(QSimConfigGroup.StarttimeInterpretation.onlyUseStarttime);
-        config.global().setNumberOfThreads(4);
+        config.global().setNumberOfThreads(8);
         config.qsim().setEndTime(endTime);
         config.qsim().setSimEndtimeInterpretation(QSimConfigGroup.EndtimeInterpretation.onlyUseEndtime);
 
         Network network = NetworkUtils.readNetwork(networkFile);
-        Path fleet = FleetGenerator.generateFleet(network, numberOfVehicles, 6, endTime, fleetFile);
+        Path fleet = FleetGenerator.generateFleet(network, numberOfVehicles, 6, endTime, fleetFile, TransportMode.drt);
 
         MultiModeDrtConfigGroup multiModeDrtConfigGroup = new MultiModeDrtConfigGroup();
         DrtWithExtensionsConfigGroup drtConfig = new DrtWithExtensionsConfigGroup();
@@ -112,7 +124,15 @@ public class ScenarioCreator {
         drtConfig.setMode(TransportMode.drt);
         drtConfig.setVehiclesFile(fleet.toString());
         drtConfig.setStopDuration(30);
+        drtConfig.setNumberOfThreads(8);
         drtConfig.addParameterSet(new RepeatedSelectiveInsertionSearchParams());
+
+        DrtParallelInserterParams drtParallelInserterParams = new DrtParallelInserterParams();
+        drtParallelInserterParams.setCollectionPeriod(15);
+        drtParallelInserterParams.setMaxIterations(2);
+        drtParallelInserterParams.setLogThreadActivity(true);
+        drtParallelInserterParams.setMaxPartitions(8);
+        drtConfig.addParameterSet(drtParallelInserterParams);
 
         multiModeDrtConfigGroup.addDrtConfigGroup(drtConfig);
 
@@ -122,11 +142,10 @@ public class ScenarioCreator {
         constraintsSet.setMaxTravelTimeBeta(600);
         constraintsSet.setMaxWaitTime(600);
 
+        // Resolution for rebalancing
         SquareGridZoneSystemParams zoneParams = new SquareGridZoneSystemParams();
-        zoneParams.setCellSize(500);
+        zoneParams.setCellSize(1000);
         drtConfig.addParameterSet(zoneParams);
-
-        drtConfig.setNumberOfThreads(6);
         drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
         config.addModule(multiModeDrtConfigGroup);
 
@@ -141,6 +160,14 @@ public class ScenarioCreator {
         drtParams.setMarginalUtilityOfTraveling(-6.0);
         drtParams.setConstant(0.0);
         config.scoring().addModeParams(drtParams);
+
+        ScoringConfigGroup.ActivityParams homeParams = new ScoringConfigGroup.ActivityParams("home");
+        homeParams.setTypicalDuration(12 * 3600);
+        config.scoring().addActivityParams(homeParams);
+
+        ScoringConfigGroup.ActivityParams work = new ScoringConfigGroup.ActivityParams("work");
+        work.setTypicalDuration(8 * 3600);
+        config.scoring().addActivityParams(work);
 
         return config;
     }
