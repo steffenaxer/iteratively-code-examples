@@ -7,6 +7,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.matsim.api.core.v01.*;
 import org.matsim.api.core.v01.population.*;
+import org.matsim.core.gbl.MatsimRandom;
 import org.matsim.core.population.PopulationUtils;
 import org.matsim.core.population.io.PopulationWriter;
 import org.matsim.core.scenario.ScenarioUtils;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Random;
 
 
 public class PlansConverter {
@@ -90,6 +92,8 @@ public class PlansConverter {
             JSONArray trips = new JSONArray(json);
             if (trips.isEmpty()) break;
 
+            Random rand = MatsimRandom.getLocalInstance();
+
             for (int i = 0; i < trips.length(); i++) {
                 JSONObject trip = trips.getJSONObject(i);
                 try {
@@ -112,7 +116,14 @@ public class PlansConverter {
                         pickupCoord = new Coord(startLon, startLat);
                     }
                     Activity start = PopulationUtils.createActivityFromCoord("home", getTransformedCoord(pickupCoord, transformation));
-                    start.setEndTime(parseTime(startTime));
+
+                    // Data is grouped originally with a 15-min resolution
+                    double parsedEndTime = parseTime(startTime);
+                    int mutationRange = 450;
+                    int shift = rand.nextInt(2 * mutationRange + 1) - mutationRange; // [-450, +450]
+                    double mutatedEndTime = parsedEndTime + shift;
+
+                    start.setEndTime(mutatedEndTime);
                     plan.addActivity(start);
 
                     Leg leg = PopulationUtils.createLeg("drt");
