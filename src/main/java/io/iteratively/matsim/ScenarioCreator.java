@@ -34,6 +34,10 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 
 /**
@@ -48,7 +52,8 @@ public class ScenarioCreator {
         options.addRequiredOption("u", "url", true, "URL to .osm.pbf file");
         options.addRequiredOption("k", "key", true, "Network key");
         options.addRequiredOption("e", "epsg", true, "EPSG code");
-        options.addRequiredOption("d", "date", true, "Date for TNP data (YYYY-MM-DD)");
+        options.addRequiredOption("S", "startDate", true, "Start date for TNP data (YYYY-MM-DD)");
+        options.addOption("E", "endDate", true, "End date for TNP data (YYYY-MM-DD)");
         options.addRequiredOption("t", "token", true, "API token for Chicago TNP");
         options.addRequiredOption("bbox", "bbox", true, "Bounding box as xmin,ymin,xmax,ymax");
         options.addOption("c", "tract", true, "Census tract file");
@@ -60,7 +65,8 @@ public class ScenarioCreator {
         Path workDir = Paths.get(cmd.getOptionValue("workdir"));
         String networkKey = cmd.getOptionValue("key");
         String epsg = cmd.getOptionValue("epsg");
-        String date = cmd.getOptionValue("date");
+        String startDateStr = cmd.getOptionValue("startDate");
+        String endDateStr = cmd.getOptionValue("endDate");
         String token = cmd.getOptionValue("token");
         String tract = cmd.getOptionValue("tract");
         URL osmUrl = new URL(cmd.getOptionValue("url"));
@@ -87,13 +93,23 @@ public class ScenarioCreator {
 
         // Generate network and plans
         NetworkConverter.createDefaultMATSimNetwork(networkDir, osmUrl, networkKey, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
-        PlansConverter.run(token, plansDir, date, epsg, tract);
+        PlansConverter.run(token, plansDir, startDateStr, endDateStr, epsg, tract);
 
         // Prepare config
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
         String plansFile = plansDir.resolve("plans.xml.gz").toString();
         String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
-        Config config = prepareConfig(networkFile, 3000, 1, 24 * 3600, 2, fleetFile);
+
+        LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate endDate = endDateStr !=  null ? LocalDate.parse(endDateStr, DateTimeFormatter.ISO_LOCAL_DATE) : null;
+
+        int daysBetween;
+        if (endDate != null) {
+            daysBetween = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        } else {
+            daysBetween = 1;
+        }
+        Config config = prepareConfig(networkFile, 3000, 1, 24 * 3600 * daysBetween, 2, fleetFile);
 
         // Finalize config
         config.global().setCoordinateSystem(epsg);
