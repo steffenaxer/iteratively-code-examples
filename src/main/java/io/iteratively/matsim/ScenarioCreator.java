@@ -93,7 +93,7 @@ public class ScenarioCreator {
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
         String plansFile = plansDir.resolve("plans.xml.gz").toString();
         String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
-        Config config = prepareConfig(networkFile, 2000, 24 * 3600, 2, fleetFile);
+        Config config = prepareConfig(networkFile, 3000, 1, 24 * 3600, 2, fleetFile);
 
         // Finalize config
         config.global().setCoordinateSystem(epsg);
@@ -103,7 +103,7 @@ public class ScenarioCreator {
         ConfigUtils.writeConfig(config, workDir.resolve("config.xml").toString());
     }
 
-    public static Config prepareConfig(String networkFile, int numberOfVehicles, double endTime, int iterations, String fleetFile) {
+    public static Config prepareConfig(String networkFile, int numberOfVehicles, int seats, double endTime, int iterations, String fleetFile) {
         Config config = ConfigUtils.createConfig();
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(iterations);
@@ -128,7 +128,7 @@ public class ScenarioCreator {
 
         // Fleet generation
         Network network = NetworkUtils.readNetwork(networkFile);
-        Path fleet = FleetGenerator.generateFleet(network, numberOfVehicles, 6, endTime, fleetFile, TransportMode.drt);
+        Path fleet = FleetGenerator.generateFleet(network, numberOfVehicles, seats, endTime, fleetFile, TransportMode.drt);
 
         // DRT setup
         MultiModeDrtConfigGroup multiModeDrtConfigGroup = new MultiModeDrtConfigGroup();
@@ -148,6 +148,9 @@ public class ScenarioCreator {
         inserterParams.setRequestsPartitioner(DrtParallelInserterParams.RequestsPartitioner.LoadAwareRoundRobinRequestsPartitioner);
         inserterParams.setVehiclesPartitioner(DrtParallelInserterParams.VehiclesPartitioner.ShiftingRoundRobinVehicleEntryPartitioner);
         drtConfig.addParameterSet(inserterParams);
+
+        DrtSpatialRequestFleetFilterParams drtSpatialRequestFleetFilterParams = new DrtSpatialRequestFleetFilterParams();
+        drtConfig.addParameterSet(drtSpatialRequestFleetFilterParams);
 
         // Rebalancing
         RebalancingParams rebalancingParams = new RebalancingParams();

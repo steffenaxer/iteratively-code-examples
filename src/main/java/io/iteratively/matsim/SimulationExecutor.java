@@ -2,6 +2,7 @@ package io.iteratively.matsim;
 
 import org.apache.commons.cli.*;
 import org.matsim.contrib.drt.extension.DrtWithExtensionsConfigGroup;
+import org.matsim.contrib.drt.extension.insertion.spatialFilter.SpatialFilterInsertionSearchQSimModule;
 import org.matsim.contrib.drt.optimizer.insertion.parallel.ParallelRequestInserterModule;
 import org.matsim.contrib.drt.run.DrtControlerCreator;
 import org.matsim.contrib.drt.run.MultiModeDrtConfigGroup;
@@ -40,8 +41,10 @@ public class SimulationExecutor {
         config.controller().setOutputDirectory(Path.of(outputDir, UUID.randomUUID().toString()).toString());
 
         Controler controller = DrtControlerCreator.createControler(config, false);
-        ConfigUtils.addOrGetModule(config, MultiModeDrtConfigGroup.class).getModalElements().forEach(drtConfig ->
-                controller.addOverridingQSimModule(new ParallelRequestInserterModule(drtConfig))
+        ConfigUtils.addOrGetModule(config, MultiModeDrtConfigGroup.class).getModalElements().forEach(drtConfig -> {
+                    controller.addOverridingQSimModule(new ParallelRequestInserterModule(drtConfig));
+                    controller.addOverridingQSimModule(new SpatialFilterInsertionSearchQSimModule(drtConfig));
+                }
         );
 
         controller.run();
