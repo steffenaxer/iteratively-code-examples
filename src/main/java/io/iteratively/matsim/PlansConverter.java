@@ -46,6 +46,7 @@ public class PlansConverter {
         options.addOption("E", "endDate", true, "End date in format YYYY-MM-DD (incl. till 24:00:00)");
         options.addRequiredOption("e", "epsg", true, "EPSG code for coordinate system");
         options.addOption("c", "tract", true, "Census tract file. Please download at https://www.census.gov/geo/maps-data/geo.html");
+        options.addOption("r", "sampleRate", true, "Rate to sample trips. ");
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
@@ -56,11 +57,13 @@ public class PlansConverter {
         String endDateStr = cmd.getOptionValue("endDate");
         String epsg = cmd.getOptionValue("epsg");
         String censusTractFile = cmd.getOptionValue("tract");
+        double sampleRate = Double.parseDouble(cmd.getOptionValue("sampleRate","1.0"));
 
-        run(token, workdir, startDateStr, endDateStr, epsg, censusTractFile);
+        run(token, workdir, startDateStr, endDateStr, epsg, censusTractFile, sampleRate);
     }
 
-    public static void run(String token, Path workdir, String startDateStr, @Nullable String endDateStr, String epsg, String censusTractFile) throws IOException, InterruptedException {
+    public static void run(String token, Path workdir, String startDateStr, @Nullable String endDateStr, String epsg, String censusTractFile, double sampleRate) throws IOException, InterruptedException {
+        Random random = MatsimRandom.getLocalInstance();
         CoordinateSampler sampler = null;
         if (censusTractFile != null) {
             sampler = new CoordinateSampler(Paths.get(censusTractFile).toFile(), "GEOID");
@@ -108,6 +111,9 @@ public class PlansConverter {
 
                 Random rand = MatsimRandom.getLocalInstance();
                 for (int i = 0; i < trips.length(); i++) {
+                    if (random.nextDouble() > sampleRate) {
+                        continue;
+                    }
                     JSONObject trip = trips.getJSONObject(i);
                     try {
                         String tripId = trip.getString("trip_id");

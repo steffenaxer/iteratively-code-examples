@@ -57,6 +57,7 @@ public class ScenarioCreator {
         options.addRequiredOption("t", "token", true, "API token for Chicago TNP");
         options.addRequiredOption("bbox", "bbox", true, "Bounding box as xmin,ymin,xmax,ymax");
         options.addOption("c", "tract", true, "Census tract file");
+        options.addOption("r", "sampleRate", true, "Rate to sample trips. ");
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
@@ -69,6 +70,7 @@ public class ScenarioCreator {
         String endDateStr = cmd.getOptionValue("endDate");
         String token = cmd.getOptionValue("token");
         String tract = cmd.getOptionValue("tract");
+        double sampleRate = Double.parseDouble(cmd.getOptionValue("sampleRate","1.0"));
         URL osmUrl = new URL(cmd.getOptionValue("url"));
 
         // Parse bounding box
@@ -93,7 +95,7 @@ public class ScenarioCreator {
 
         // Generate network and plans
         NetworkConverter.createDefaultMATSimNetwork(networkDir, osmUrl, networkKey, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
-        PlansConverter.run(token, plansDir, startDateStr, endDateStr, epsg, tract);
+        PlansConverter.run(token, plansDir, startDateStr, endDateStr, epsg, tract, sampleRate);
 
         // Prepare config
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
