@@ -1,29 +1,17 @@
 package io.iteratively.matsim;
 
 import org.apache.commons.cli.*;
-import org.matsim.api.core.v01.Id;
-import org.matsim.api.core.v01.network.Network;
-import org.matsim.contrib.common.zones.systems.grid.square.SquareGridZoneSystemParams;
 import org.matsim.contrib.drt.extension.DrtWithExtensionsConfigGroup;
-import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsParams;
-import org.matsim.contrib.drt.optimizer.constraints.DrtOptimizationConstraintsSetImpl;
 import org.matsim.contrib.drt.optimizer.insertion.parallel.ParallelRequestInserterModule;
-import org.matsim.contrib.drt.optimizer.insertion.repeatedselective.RepeatedSelectiveInsertionSearchParams;
-import org.matsim.contrib.drt.run.DrtConfigGroup;
 import org.matsim.contrib.drt.run.DrtControlerCreator;
 import org.matsim.contrib.drt.run.MultiModeDrtConfigGroup;
 import org.matsim.contrib.dvrp.run.DvrpConfigGroup;
 import org.matsim.core.config.Config;
 import org.matsim.core.config.ConfigUtils;
-import org.matsim.core.config.groups.QSimConfigGroup;
-import org.matsim.core.config.groups.ReplanningConfigGroup;
-import org.matsim.core.config.groups.ScoringConfigGroup;
 import org.matsim.core.controler.Controler;
-import org.matsim.core.controler.OutputDirectoryHierarchy;
-import org.matsim.core.network.NetworkUtils;
-import org.matsim.vis.otfvis.OTFVisConfigGroup;
 
 import java.nio.file.Path;
+import java.util.UUID;
 
 /**
  * @author steffenaxer
@@ -49,7 +37,7 @@ public class SimulationExecutor {
         String outputDir = cmd.getOptionValue("o");
 
         Config config = ConfigUtils.loadConfig(configFilePath, new MultiModeDrtConfigGroup(DrtWithExtensionsConfigGroup::new), new DvrpConfigGroup());
-        config.controller().setOutputDirectory(outputDir);
+        config.controller().setOutputDirectory(Path.of(outputDir, UUID.randomUUID().toString()).toString());
 
         Controler controller = DrtControlerCreator.createControler(config, false);
         ConfigUtils.addOrGetModule(config, MultiModeDrtConfigGroup.class).getModalElements().forEach(drtConfig ->
