@@ -11,6 +11,7 @@ import org.matsim.api.core.v01.network.Network;
 import org.matsim.api.core.v01.network.NetworkWriter;
 import org.matsim.contrib.osm.networkReader.SupersonicOsmNetworkReader;
 import org.matsim.core.network.NetworkUtils;
+import org.matsim.core.network.algorithms.NetworkSimplifier;
 import org.matsim.core.utils.geometry.CoordinateTransformation;
 import org.matsim.core.utils.geometry.transformations.TransformationFactory;
 import org.openstreetmap.osmosis.core.Osmosis;
@@ -21,6 +22,8 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+
+import static org.matsim.core.network.algorithms.NetworkSimplifier.createNetworkSimplifier;
 
 /**
  * @author steffenaxer
@@ -81,14 +84,13 @@ public class NetworkConverter {
 
     private static void createDefaultMATSimNetwork(String osmPbfFile, String outputNetworkFilePath, String utmEpsg, String drtMode) {
         CoordinateTransformation coordinateTransformation = TransformationFactory.getCoordinateTransformation(TransformationFactory.WGS84, utmEpsg);
-        Set<String> defaultModes = Set.of(TransportMode.car, TransportMode.bike);
         Network network = new SupersonicOsmNetworkReader.Builder()
                 .setCoordinateTransformation(coordinateTransformation)
-                .setIncludeLinkAtCoordWithHierarchy((coord, _) -> true)
-                .setPreserveNodeWithId(id -> true)
-                .setAfterLinkCreated((link, osmTags, isReverse) -> link.setAllowedModes(defaultModes))
                 .build()
                 .read(osmPbfFile);
+        NetworkSimplifier networkSimplifier = createNetworkSimplifier(network);
+        networkSimplifier.run(network);
+
         NetworkUtils.cleanNetwork(network, Set.of(TransportMode.car));
         network.getLinks().values().stream()
                 .filter(link -> link.getAllowedModes().contains(TransportMode.car))

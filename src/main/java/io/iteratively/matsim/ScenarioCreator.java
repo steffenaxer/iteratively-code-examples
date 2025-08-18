@@ -136,7 +136,7 @@ public class ScenarioCreator {
 
         // QSim setup
         config.qsim().setSimStarttimeInterpretation(QSimConfigGroup.StarttimeInterpretation.onlyUseStarttime);
-        config.global().setNumberOfThreads(8);
+        config.global().setNumberOfThreads(12);
         config.qsim().setEndTime(endTime);
         config.qsim().setNumberOfThreads(6);
         config.qsim().setSimEndtimeInterpretation(QSimConfigGroup.EndtimeInterpretation.onlyUseEndtime);
