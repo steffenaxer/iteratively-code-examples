@@ -102,6 +102,7 @@ public class PlansConverter {
                 } else {
                     String url = buildUrl(currentDateStr, PAGE_LIMIT, offset);
                     json = TripLoader.downloadFromUrl(url, token);
+                    cacheFile.toFile().getParentFile().mkdirs();
                     Files.writeString(cacheFile, json);
                     LOG.info("Downloaded and cached page: {}", cacheFile);
                 }
