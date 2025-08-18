@@ -32,7 +32,7 @@ public class PlansConverter {
     private static final String BASE_URL = "https://data.cityofchicago.org/resource/6dvr-xwnh.json";
 
     public static String buildUrl(String date, int limit, int offset) {
-        String whereClause = String.format("trip_start_timestamp >= '%sT00:00:00' AND trip_start_timestamp < '%sT24:00:00'", date, date);
+        String whereClause = String.format("trip_start_timestamp >= '%sT00:00:00' AND trip_start_timestamp < '%sT23:59:59'", date, date);
         String encodedWhere = URLEncoder.encode(whereClause, StandardCharsets.UTF_8);
 
         return String.format("%s?$where=%s&$order=trip_start_timestamp%%20ASC&$limit=%d&$offset=%d", BASE_URL, encodedWhere, limit, offset);
