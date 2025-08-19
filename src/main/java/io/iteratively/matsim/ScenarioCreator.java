@@ -154,6 +154,11 @@ public class ScenarioCreator {
         drtConfig.setStopDuration(30);
         drtConfig.addParameterSet(new RepeatedSelectiveInsertionSearchParams());
 
+        // Analysis zone system
+        SquareGridZoneSystemParams analysisZones = new SquareGridZoneSystemParams();
+        analysisZones.setCellSize(3000);
+        drtConfig.addParameterSet(analysisZones);
+
         // Parallel insertion
         DrtParallelInserterParams inserterParams = new DrtParallelInserterParams();
         inserterParams.setCollectionPeriod(15);
