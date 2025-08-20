@@ -37,32 +37,32 @@
         <dependency>
             <groupId>org.matsim</groupId>
             <artifactId>matsim</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>osm</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>dvrp</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt-extensions</artifactId>
-            <version>2026.0-2025w32</version>
+            <version>2026.0-PR4219</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
