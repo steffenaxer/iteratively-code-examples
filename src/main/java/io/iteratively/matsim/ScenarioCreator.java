@@ -108,7 +108,7 @@ public class ScenarioCreator {
         } else {
             daysBetween = 1;
         }
-        Config config = prepareConfig(networkFile, 3000, 1, 24 * 3600 * daysBetween, 2, fleetFile);
+        Config config = prepareConfig(networkFile, 3400, 1, 24 * 3600 * daysBetween, 2, fleetFile);
 
         // Finalize config
         config.global().setCoordinateSystem(epsg);
