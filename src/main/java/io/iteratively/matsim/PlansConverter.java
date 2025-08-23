@@ -155,6 +155,7 @@ public class PlansConverter {
                         double fare = trip.optDouble("fare", 0.0);
                         double tip_share = tip / (tip + fare);
 
+                        leg.getAttributes().putAttribute("trip_start_timestamp", startTime);
                         leg.getAttributes().putAttribute("tip_share", Double.isNaN(tip_share) ? 0.0 : tip_share);
                         leg.getAttributes().putAttribute("additional_charges", trip.optDouble("additional_charges", 0.0));
                         leg.getAttributes().putAttribute("trip_total", trip.optDouble("trip_total", 0.0));
