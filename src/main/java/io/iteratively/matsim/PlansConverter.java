@@ -150,6 +150,12 @@ public class PlansConverter {
                         leg.getAttributes().putAttribute("distance_miles", trip.optDouble("trip_miles", 0.0));
                         leg.getAttributes().putAttribute("fare", trip.optDouble("fare", 0.0));
                         leg.getAttributes().putAttribute("tip", trip.optDouble("tip", 0.0));
+
+                        double tip = trip.optDouble("tip", 0.0);
+                        double fare = trip.optDouble("fare", 0.0);
+                        double tip_share = tip / (tip + fare);
+
+                        leg.getAttributes().putAttribute("tip_share", Double.isNaN(tip_share) ? 0.0 : tip_share);
                         leg.getAttributes().putAttribute("additional_charges", trip.optDouble("additional_charges", 0.0));
                         leg.getAttributes().putAttribute("trip_total", trip.optDouble("trip_total", 0.0));
                         leg.getAttributes().putAttribute("trips_pooled", trip.optString("trips_pooled", "0"));
