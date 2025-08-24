@@ -96,7 +96,6 @@ public class ScenarioCreator {
 
         // Prepare config
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
-        String plansFile = plansDir.resolve("plans.xml.gz").toString();
         String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
 
         LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
@@ -111,10 +110,10 @@ public class ScenarioCreator {
         Config config = prepareConfig(networkFile, 3400, 1, 24 * 3600 * daysBetween, 2, fleetFile);
 
         // Finalize config
+        config.network().setInputFile("network/"+networkKey+".network.xml.gz");
+        config.plans().setInputFile("plans/plans.xml.gz");
+        config.controller().setOutputDirectory("output");
         config.global().setCoordinateSystem(epsg);
-        config.network().setInputFile(networkFile);
-        config.plans().setInputFile(plansFile);
-        config.controller().setOutputDirectory(outputDir.toString());
         ConfigUtils.writeConfig(config, workDir.resolve("config.xml").toString());
     }
 
@@ -143,14 +142,14 @@ public class ScenarioCreator {
 
         // Fleet generation
         Network network = NetworkUtils.readNetwork(networkFile);
-        Path fleet = FleetGenerator.generateFleet(network, numberOfVehicles, seats, endTime, fleetFile, TransportMode.drt);
+        FleetGenerator.generateFleet(network, numberOfVehicles, seats, endTime, fleetFile, TransportMode.drt);
 
         // DRT setup
         MultiModeDrtConfigGroup multiModeDrtConfigGroup = new MultiModeDrtConfigGroup();
         DrtWithExtensionsConfigGroup drtConfig = new DrtWithExtensionsConfigGroup();
         drtConfig.setUseModeFilteredSubnetwork(true);
         drtConfig.setMode(TransportMode.drt);
-        drtConfig.setVehiclesFile(fleet.toString());
+        drtConfig.setVehiclesFile("fleet/fleet.xml.gz");
         drtConfig.setStopDuration(30);
         drtConfig.addParameterSet(new RepeatedSelectiveInsertionSearchParams());
 
