@@ -1,4 +1,5 @@
 # MATSim Chicago TNP Scenario Toolkit
+**Blog:** https://iteratively.io/p/drt-chicago/
 
 This repository provides a set of tools to generate and execute MATSim scenarios based on the Chicago TNP (Transportation Network Providers) dataset. It includes three main components:
 
@@ -26,6 +27,7 @@ java -cp <your-classpath> chicago.ScenarioCreator   -w <workdir>   -u <osm.pbf U
 
 ### 2. `PlansConverter.java`
 Downloads and converts trip data from the Chicago TNP dataset into MATSim agent plans. 
+Register at [City of Chicago](https://data.cityofchicago.org/) to create your API token.
 Cenus tract shapes files could be downloaded [here](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html)
 
 Supports:
