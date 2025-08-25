@@ -1,4 +1,4 @@
-package io.iteratively.chicago;
+package chicago;
 
 import org.apache.commons.cli.*;
 import org.matsim.contrib.drt.extension.DrtWithExtensionsConfigGroup;

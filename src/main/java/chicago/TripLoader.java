@@ -1,4 +1,4 @@
-package io.iteratively.chicago;
+package chicago;
 
 import java.io.IOException;
 import java.net.URI;

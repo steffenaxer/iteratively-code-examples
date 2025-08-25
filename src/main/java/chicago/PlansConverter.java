@@ -1,4 +1,4 @@
-package io.iteratively.chicago;
+package chicago;
 
 import jakarta.annotation.Nullable;
 import org.apache.commons.cli.*;

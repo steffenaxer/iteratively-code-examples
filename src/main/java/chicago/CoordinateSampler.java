@@ -1,4 +1,4 @@
-package io.iteratively.chicago;
+package chicago;
 
 import org.geotools.api.feature.simple.SimpleFeature;
 import org.geotools.feature.FeatureIterator;
