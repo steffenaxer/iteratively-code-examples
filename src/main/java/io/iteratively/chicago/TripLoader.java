@@ -1,4 +1,4 @@
-package io.iteratively.matsim;
+package io.iteratively.chicago;
 
 import java.io.IOException;
 import java.net.URI;

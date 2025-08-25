@@ -1,4 +1,4 @@
-package io.iteratively.matsim;
+package io.iteratively.chicago;
 
 import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.Identifiable;

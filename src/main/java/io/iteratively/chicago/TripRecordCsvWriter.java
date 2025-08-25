@@ -1,4 +1,4 @@
-package io.iteratively.matsim;
+package io.iteratively.chicago;
 
 import org.matsim.api.core.v01.population.Plan;
 import org.matsim.api.core.v01.population.Person;

@@ -1,4 +1,4 @@
-package io.iteratively.matsim;
+package io.iteratively.chicago;
 
 import org.geotools.api.feature.simple.SimpleFeature;
 import org.geotools.feature.FeatureIterator;

@@ -21,7 +21,7 @@ Creates a full MATSim scenario from scratch using:
 
 **Usage:**
 ```bash
-java -cp <your-classpath> io.iteratively.matsim.ScenarioCreator   -w <workdir>   -u <osm.pbf URL>   -k <network key>   -e <EPSG code>   -S <start date>   -E <end date>   -t <API token>   -bbox <xmin,ymin,xmax,ymax>   [-c <census tract file>]   [-r <sample rate>]
+java -cp <your-classpath> io.iteratively.chicago.ScenarioCreator   -w <workdir>   -u <osm.pbf URL>   -k <network key>   -e <EPSG code>   -S <start date>   -E <end date>   -t <API token>   -bbox <xmin,ymin,xmax,ymax>   [-c <census tract file>]   [-r <sample rate>]
 ```
 
 ### 2. `PlansConverter.java`
@@ -37,7 +37,7 @@ Supports:
 
 **Usage:**
 ```bash
-java -cp <your-classpath> io.iteratively.matsim.PlansConverter   -t <API token>   -w <workdir>   -S <start date>   [-E <end date>]   -e <EPSG code>   [-c <census tract file>]   [-r <sample rate>]
+java -cp <your-classpath> io.iteratively.chicago.PlansConverter   -t <API token>   -w <workdir>   -S <start date>   [-E <end date>]   -e <EPSG code>   [-c <census tract file>]   [-r <sample rate>]
 ```
 
 ### 3. `SimulationExecutor.java`
@@ -48,7 +48,7 @@ Executes a MATSim simulation using the generated scenario. It supports:
 
 **Usage:**
 ```bash
-java -cp <your-classpath> io.iteratively.matsim.SimulationExecutor   -c <path to config.xml>   -o <output directory>
+java -cp <your-classpath> io.iteratively.chicago.SimulationExecutor   -c <path to config.xml>   -o <output directory>
 ```
 
 ## 🧠 Author
