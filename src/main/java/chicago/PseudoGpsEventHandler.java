@@ -1,7 +1,6 @@
 package chicago;
 
 import org.apache.commons.cli.*;
-import org.apache.commons.cli.help.HelpFormatter;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 import org.matsim.api.core.v01.Coord;
@@ -29,8 +28,6 @@ import java.io.IOException;
 import java.util.*;
 
 public class PseudoGpsEventHandler implements LinkEnterEventHandler, LinkLeaveEventHandler {
-
-    private final Map<Id<Vehicle>, Double> lastSampleTime = new HashMap<>();
     private final double probeRate;
     private final Map<Id<Vehicle>, Boolean> sampledVehicles = new HashMap<>();
     private final Network network;
@@ -116,7 +113,7 @@ public class PseudoGpsEventHandler implements LinkEnterEventHandler, LinkLeaveEv
 
 
     private boolean isSampled(Id<Vehicle> vehicleId) {
-        return sampledVehicles.computeIfAbsent(vehicleId, id -> random.nextDouble() < probeRate);
+        return sampledVehicles.computeIfAbsent(vehicleId, _ -> random.nextDouble() < probeRate);
     }
 
 
