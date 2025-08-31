@@ -195,7 +195,7 @@ public class ScenarioCreator {
         config.addModule(multiModeDrtConfigGroup);
 
         // Replanning
-        ReplanningConfigGroup.StrategySettings strategy = new ReplanningConfigGroup.StrategySettings(Id.create("1", ReplanningConfigGroup.StrategySettings.class));
+        ReplanningConfigGroup.StrategySettings strategy = new ReplanningConfigGroup.StrategySettings();
         strategy.setStrategyName("KeepLastSelected");
         strategy.setWeight(0.0);
         config.replanning().addStrategySettings(strategy);
