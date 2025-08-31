@@ -1,8 +1,11 @@
-package chicago;
+package chicago.gpsdata;
 
 import org.apache.commons.cli.*;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
 import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.events.LinkEnterEvent;
@@ -174,6 +177,31 @@ public class PseudoGpsEventHandler implements LinkEnterEventHandler, LinkLeaveEv
             printer.close();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static class TrajectorySegment {
+        String vehicleId;
+        String pseudoId;
+        double startTime;
+        double endTime;
+        List<Coordinate> coordinates = new ArrayList<>();
+
+        public TrajectorySegment(String vehicleId, String pseudoId, double startTime, double endTime) {
+            this.vehicleId = vehicleId;
+            this.pseudoId = pseudoId;
+            this.startTime = startTime;
+            this.endTime = endTime;
+        }
+
+        public void addPoint(double lon, double lat) {
+            coordinates.add(new Coordinate(lon, lat));
+        }
+
+        public String toWKT() {
+            GeometryFactory gf = new GeometryFactory();
+            LineString line = gf.createLineString(coordinates.toArray(new Coordinate[0]));
+            return line.toText();
         }
     }
 
