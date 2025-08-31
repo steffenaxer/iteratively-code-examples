@@ -113,7 +113,7 @@ public class PseudoGpsEventHandler implements LinkEnterEventHandler, LinkLeaveEv
 
 
     private boolean isSampled(Id<Vehicle> vehicleId) {
-        return sampledVehicles.computeIfAbsent(vehicleId, _ -> random.nextDouble() < probeRate);
+        return sampledVehicles.computeIfAbsent(vehicleId, id -> random.nextDouble() < probeRate);
     }
 
 
