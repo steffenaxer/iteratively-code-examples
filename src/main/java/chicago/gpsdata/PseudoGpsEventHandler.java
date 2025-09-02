@@ -61,8 +61,8 @@ public class PseudoGpsEventHandler implements LinkEnterEventHandler, LinkLeaveEv
         options.addOption("s", "samplingInterval", true, "Sampling interval in seconds (e.g. 15.0)");
         options.addOption("n", "noiseSigma", true, "Spatial noise standard deviation (e.g. 10.0)");
         options.addOption("i", "pseudoIdInterval", true, "Pseudo ID interval in seconds (e.g. 1800.0)");
-        options.addOption("o", "outputFile", true, "Output CSV file path");
         options.addOption("d", "outputDirectory", true, "MATSim output directory");
+        options.addOption("o", "outputFile", true, "Trajectory output CSV file path");
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
