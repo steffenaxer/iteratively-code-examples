@@ -1,5 +1,6 @@
 package chicago;
 
+import chicago.stopnetwork.DrtStopGenerator;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -28,6 +29,7 @@ import org.matsim.core.config.groups.ScoringConfigGroup;
 import org.matsim.core.controler.OutputDirectoryHierarchy;
 import org.matsim.core.network.NetworkUtils;
 
+import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -97,6 +99,7 @@ public class ScenarioCreator {
         // Prepare config
         String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
         String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
+        String stopsFile = fleetDir.resolve("stops.xml.gz").toString();
 
         LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
         LocalDate endDate = endDateStr !=  null ? LocalDate.parse(endDateStr, DateTimeFormatter.ISO_LOCAL_DATE) : null;
@@ -107,7 +110,7 @@ public class ScenarioCreator {
         } else {
             daysBetween = 1;
         }
-        Config config = prepareConfig(networkFile, 3400, 1, 24 * 3600 * daysBetween, 2, fleetFile);
+        Config config = prepareConfig(networkFile, 3400, 4, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, true);
 
         // Finalize config
         config.network().setInputFile("network/"+networkKey+".network.xml.gz");
@@ -117,7 +120,8 @@ public class ScenarioCreator {
         ConfigUtils.writeConfig(config, workDir.resolve("config.xml").toString());
     }
 
-    public static Config prepareConfig(String networkFile, int numberOfVehicles, int seats, double endTime, int iterations, String fleetFile) {
+    public static Config prepareConfig(String networkFile, int numberOfVehicles, int seats, double endTime, int iterations, String fleetFile, String stopsFile,
+                                       boolean enableRidePooling) throws IOException {
         Config config = ConfigUtils.createConfig();
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(iterations);
@@ -185,9 +189,22 @@ public class ScenarioCreator {
         // Optimization constraints
         DrtOptimizationConstraintsParams constraintsParams = drtConfig.addOrGetDrtOptimizationConstraintsParams();
         DrtOptimizationConstraintsSetImpl constraintsSet = constraintsParams.addOrGetDefaultDrtOptimizationConstraintsSet();
-        constraintsSet.setMaxTravelTimeAlpha(1.);
-        constraintsSet.setMaxTravelTimeBeta(600);
-        constraintsSet.setMaxWaitTime(600);
+
+        if(!enableRidePooling)
+        {
+            constraintsSet.setMaxTravelTimeAlpha(1.);
+            constraintsSet.setMaxTravelTimeBeta(600);
+            constraintsSet.setMaxWaitTime(600);
+            drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
+        } else {
+            constraintsSet.setMaxTravelTimeAlpha(1.4);
+            constraintsSet.setMaxTravelTimeBeta(600);
+            constraintsSet.setMaxWaitTime(600);
+            constraintsSet.setMaxAbsoluteDetour(30*60);
+            drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.stopbased);
+            DrtStopGenerator.run(network, 250, stopsFile);
+            drtConfig.setTransitStopFile("fleet/stops.xml.gz");
+        }
 
         // Operational scheme
         drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
