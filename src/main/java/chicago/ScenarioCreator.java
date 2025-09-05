@@ -110,7 +110,7 @@ public class ScenarioCreator {
         } else {
             daysBetween = 1;
         }
-        Config config = prepareConfig(networkFile, 3400, 4, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, true);
+        Config config = prepareConfig(networkFile, 3000, 4, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, true);
 
         // Finalize config
         config.network().setInputFile("network/"+networkKey+".network.xml.gz");
@@ -197,10 +197,10 @@ public class ScenarioCreator {
             constraintsSet.setMaxWaitTime(600);
             drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
         } else {
-            constraintsSet.setMaxTravelTimeAlpha(1.4);
+            constraintsSet.setMaxTravelTimeAlpha(1.5);
             constraintsSet.setMaxTravelTimeBeta(600);
             constraintsSet.setMaxWaitTime(600);
-            constraintsSet.setMaxAbsoluteDetour(30*60);
+            constraintsSet.setMaxAbsoluteDetour(900);
             drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.stopbased);
             DrtStopGenerator.run(network, 250, stopsFile);
             drtConfig.setTransitStopFile("fleet/stops.xml.gz");
