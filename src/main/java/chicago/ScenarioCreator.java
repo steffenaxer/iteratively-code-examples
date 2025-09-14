@@ -110,7 +110,7 @@ public class ScenarioCreator {
         } else {
             daysBetween = 1;
         }
-        Config config = prepareConfig(networkFile, 3000, 4, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, true);
+        Config config = prepareConfig(networkFile, 3500, 1, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, false);
 
         // Finalize config
         config.network().setInputFile("network/"+networkKey+".network.xml.gz");

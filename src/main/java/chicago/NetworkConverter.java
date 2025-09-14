@@ -74,8 +74,12 @@ public class NetworkConverter {
 
     public static void createDefaultMATSimNetwork(Path workDir, URL osmPbfUrl, String networkKey, String scenarioEPSG, double xmin, double ymin, double xmax, double ymax, String drtMode) {
         String filename = Paths.get(osmPbfUrl.getPath()).getFileName().toString();
-        File osmFile = workDir.resolve(filename).toFile();
-        downloadUrl(osmPbfUrl, osmFile);
+        File osmFile = workDir.resolve("..","..","cache",filename).toFile();
+
+        if(!osmFile.exists()){
+            downloadUrl(osmPbfUrl, osmFile);
+        }
+
         String bboxPbfFile = workDir.resolve(networkKey + ".bbox.osm.pbf").toString();
         getPbfForBBox(osmFile.toString(), bboxPbfFile, xmin, ymin, xmax, ymax);
         String outputNetworkFilePath = workDir.resolve(networkKey + ".network.xml.gz").toString();

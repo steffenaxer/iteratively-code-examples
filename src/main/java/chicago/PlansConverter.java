@@ -94,7 +94,7 @@ public class PlansConverter {
             double dayOffsetSeconds = java.time.Duration.between(startDate.atStartOfDay(), currentDate.atStartOfDay()).toSeconds();
 
             while (true) {
-                Path cacheFile = workdir.resolve("cache",String.format("day_%s_page_%03d.json", currentDateStr, page));
+                Path cacheFile = workdir.resolve("..","..","cache",String.format("day_%s_page_%03d.json", currentDateStr, page));
                 String json;
                 if (Files.exists(cacheFile)) {
                     json = Files.readString(cacheFile);
