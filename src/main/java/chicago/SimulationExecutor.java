@@ -38,7 +38,7 @@ public class SimulationExecutor {
         String outputDir = cmd.getOptionValue("o");
 
         Config config = ConfigUtils.loadConfig(configFilePath, new MultiModeDrtConfigGroup(DrtWithExtensionsConfigGroup::new), new DvrpConfigGroup());
-        config.controller().setOutputDirectory(Path.of(outputDir, UUID.randomUUID().toString()).toString());
+        config.controller().setOutputDirectory(Path.of(outputDir, "result").toString());
 
         Controler controller = DrtControlerCreator.createControler(config, false);
         ConfigUtils.addOrGetModule(config, MultiModeDrtConfigGroup.class).getModalElements().forEach(drtConfig -> {
