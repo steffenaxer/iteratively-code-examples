@@ -110,7 +110,7 @@ public class ScenarioCreator {
         } else {
             daysBetween = 1;
         }
-        Config config = prepareConfig(networkFile, 3000, 4, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, true);
+        Config config = prepareConfig(networkFile, 3500, 1, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, false);
 
         // Finalize config
         config.network().setInputFile("network/"+networkKey+".network.xml.gz");
@@ -193,13 +193,13 @@ public class ScenarioCreator {
         if(!enableRidePooling)
         {
             constraintsSet.setMaxTravelTimeAlpha(1.);
-            constraintsSet.setMaxTravelTimeBeta(600);
-            constraintsSet.setMaxWaitTime(600);
+            constraintsSet.setMaxTravelTimeBeta(900);
+            constraintsSet.setMaxWaitTime(900);
             drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.door2door);
         } else {
             constraintsSet.setMaxTravelTimeAlpha(1.5);
-            constraintsSet.setMaxTravelTimeBeta(600);
-            constraintsSet.setMaxWaitTime(600);
+            constraintsSet.setMaxTravelTimeBeta(900);
+            constraintsSet.setMaxWaitTime(900);
             constraintsSet.setMaxAbsoluteDetour(900);
             drtConfig.setOperationalScheme(DrtConfigGroup.OperationalScheme.stopbased);
             DrtStopGenerator.run(network, 250, stopsFile);
