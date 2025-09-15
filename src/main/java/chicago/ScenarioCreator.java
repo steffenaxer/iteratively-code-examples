@@ -37,6 +37,7 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -62,14 +63,14 @@ public class ScenarioCreator {
         CommandLine cmd = parser.parse(options, args);
 
         // Extract parameters
-        Path workDir = Paths.get(cmd.getOptionValue("workdir"));
+
         String networkKey = cmd.getOptionValue("key");
         String epsg = cmd.getOptionValue("epsg");
         String startDateStr = cmd.getOptionValue("startDate");
         String endDateStr = cmd.getOptionValue("endDate");
         String token = cmd.getOptionValue("token");
         String tract = cmd.getOptionValue("tract");
-        double sampleRate = Double.parseDouble(cmd.getOptionValue("sampleRate","1.0"));
+        double sampleRate = Double.parseDouble(cmd.getOptionValue("sampleRate", "1.0"));
         URL osmUrl = new URL(cmd.getOptionValue("url"));
 
         // Parse bounding box
@@ -82,42 +83,53 @@ public class ScenarioCreator {
         double xmax = Double.parseDouble(bboxParts[2]);
         double ymax = Double.parseDouble(bboxParts[3]);
 
-        // Create directories
-        Path networkDir = workDir.resolve("network");
-        Path plansDir = workDir.resolve("plans");
-        Path fleetDir = workDir.resolve("fleet");
-        Path outputDir = workDir.resolve("output");
-        Files.createDirectories(networkDir);
-        Files.createDirectories(plansDir);
-        Files.createDirectories(fleetDir);
-        Files.createDirectories(outputDir);
+        for (String variant : List.of("rp", "rh")) {
+            Path workDir = Paths.get(cmd.getOptionValue("workdir"));
+            workDir = Paths.get(workDir.toString(), variant);
+            boolean rp = variant.equals("rp");
+            // Create directories
+            Path networkDir = workDir.resolve("network");
+            Path plansDir = workDir.resolve("plans");
+            Path fleetDir = workDir.resolve("fleet");
+            Path outputDir = workDir.resolve("output");
+            Files.createDirectories(networkDir);
+            Files.createDirectories(plansDir);
+            Files.createDirectories(fleetDir);
+            Files.createDirectories(outputDir);
 
-        // Generate network and plans
-        NetworkConverter.createDefaultMATSimNetwork(networkDir, osmUrl, networkKey, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
-        PlansConverter.run(token, plansDir, startDateStr, endDateStr, epsg, tract, sampleRate);
+            // Generate network and plans
+            NetworkConverter.createDefaultMATSimNetwork(networkDir, osmUrl, networkKey, epsg, xmin, ymin, xmax, ymax, TransportMode.drt);
+            PlansConverter.run(token, plansDir, startDateStr, endDateStr, epsg, tract, sampleRate);
 
-        // Prepare config
-        String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
-        String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
-        String stopsFile = fleetDir.resolve("stops.xml.gz").toString();
+            // Prepare config
+            String networkFile = networkDir.resolve(networkKey + ".network.xml.gz").toString();
+            String fleetFile = fleetDir.resolve("fleet.xml.gz").toString();
+            String stopsFile = fleetDir.resolve("stops.xml.gz").toString();
 
-        LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
-        LocalDate endDate = endDateStr !=  null ? LocalDate.parse(endDateStr, DateTimeFormatter.ISO_LOCAL_DATE) : null;
+            LocalDate startDate = LocalDate.parse(startDateStr, DateTimeFormatter.ISO_LOCAL_DATE);
+            LocalDate endDate = endDateStr != null ? LocalDate.parse(endDateStr, DateTimeFormatter.ISO_LOCAL_DATE) : null;
 
-        int daysBetween;
-        if (endDate != null) {
-            daysBetween = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
-        } else {
-            daysBetween = 1;
+            int daysBetween;
+            if (endDate != null) {
+                daysBetween = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+            } else {
+                daysBetween = 1;
+            }
+
+            Config config;
+            if (rp) {
+                config = prepareConfig(networkFile, 2500, 4, 24 * 3600 * daysBetween, 1, fleetFile, stopsFile, true);
+            } else {
+                config = prepareConfig(networkFile, 3800, 1, 24 * 3600 * daysBetween, 1, fleetFile, stopsFile, false);
+            }
+
+            // Finalize config
+            config.network().setInputFile("network/" + networkKey + ".network.xml.gz");
+            config.plans().setInputFile("plans/plans.xml.gz");
+            config.controller().setOutputDirectory("output");
+            config.global().setCoordinateSystem(epsg);
+            ConfigUtils.writeConfig(config, workDir.resolve("config.xml").toString());
         }
-        Config config = prepareConfig(networkFile, 3500, 1, 24 * 3600 * daysBetween, 2, fleetFile, stopsFile, false);
-
-        // Finalize config
-        config.network().setInputFile("network/"+networkKey+".network.xml.gz");
-        config.plans().setInputFile("plans/plans.xml.gz");
-        config.controller().setOutputDirectory("output");
-        config.global().setCoordinateSystem(epsg);
-        ConfigUtils.writeConfig(config, workDir.resolve("config.xml").toString());
     }
 
     public static Config prepareConfig(String networkFile, int numberOfVehicles, int seats, double endTime, int iterations, String fleetFile, String stopsFile,
@@ -190,8 +202,7 @@ public class ScenarioCreator {
         DrtOptimizationConstraintsParams constraintsParams = drtConfig.addOrGetDrtOptimizationConstraintsParams();
         DrtOptimizationConstraintsSetImpl constraintsSet = constraintsParams.addOrGetDefaultDrtOptimizationConstraintsSet();
 
-        if(!enableRidePooling)
-        {
+        if (!enableRidePooling) {
             constraintsSet.setMaxTravelTimeAlpha(1.);
             constraintsSet.setMaxTravelTimeBeta(900);
             constraintsSet.setMaxWaitTime(900);
