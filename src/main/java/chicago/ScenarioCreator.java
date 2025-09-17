@@ -27,6 +27,7 @@ import org.matsim.core.config.groups.QSimConfigGroup;
 import org.matsim.core.config.groups.ReplanningConfigGroup;
 import org.matsim.core.config.groups.ScoringConfigGroup;
 import org.matsim.core.controler.OutputDirectoryHierarchy;
+import org.matsim.core.gbl.MatsimRandom;
 import org.matsim.core.network.NetworkUtils;
 
 import java.io.IOException;
@@ -87,6 +88,7 @@ public class ScenarioCreator {
             Path workDir = Paths.get(cmd.getOptionValue("workdir"));
             workDir = Paths.get(workDir.toString(), variant);
             boolean rp = variant.equals("rp");
+            MatsimRandom.reset();
             // Create directories
             Path networkDir = workDir.resolve("network");
             Path plansDir = workDir.resolve("plans");
