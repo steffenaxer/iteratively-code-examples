@@ -122,7 +122,7 @@ public class ScenarioCreator {
             if (rp) {
                 config = prepareConfig(networkFile, 2500, 4, 24 * 3600 * daysBetween, 1, fleetFile, stopsFile, true);
             } else {
-                config = prepareConfig(networkFile, 4200, 1, 24 * 3600 * daysBetween, 1, fleetFile, stopsFile, false);
+                config = prepareConfig(networkFile, 4500, 1, 24 * 3600 * daysBetween, 1, fleetFile, stopsFile, false);
             }
 
             // Finalize config
