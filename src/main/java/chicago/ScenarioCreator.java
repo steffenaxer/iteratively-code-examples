@@ -192,7 +192,7 @@ public class ScenarioCreator {
         // Rebalancing
         RebalancingParams rebalancingParams = new RebalancingParams();
         MinCostFlowRebalancingStrategyParams strategyParams = new MinCostFlowRebalancingStrategyParams();
-        strategyParams.setTargetAlpha(0.3);
+        strategyParams.setTargetAlpha(0.5);
         strategyParams.setTargetBeta(0.4);
         SquareGridZoneSystemParams zoneSystemParams = new SquareGridZoneSystemParams();
         zoneSystemParams.setCellSize(1000);
