@@ -47,8 +47,9 @@ public class DrtStopGenerator {
         Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         var f = scenario.getTransitSchedule().getFactory();
         finalStops.forEach(stop -> {
-            TransitStopFacility TransitStopFacility = f.createTransitStopFacility(Id.create(stop.getId(), TransitStopFacility.class),stop.getCoord(),false);
-            scenario.getTransitSchedule().addStopFacility(TransitStopFacility);});
+            TransitStopFacility transitStopFacility = f.createTransitStopFacility(Id.create(stop.getId(), TransitStopFacility.class),stop.getCoord(),false);
+            transitStopFacility.setLinkId(stop.getLinkId());
+            scenario.getTransitSchedule().addStopFacility(transitStopFacility);});
         new TransitScheduleWriter(scenario.getTransitSchedule()).writeFile(outputStops);
     }
 
