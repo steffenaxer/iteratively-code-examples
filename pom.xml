@@ -7,10 +7,15 @@
     <groupId>io.iteratively</groupId>
     <artifactId>iteratively-code-examples</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>OffLoadPlans</module>
+    </modules>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <matsim.version>2026.0-2025w50</matsim.version>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -26,8 +31,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>22</source>
-                    <target>22</target>
+                    <source>25</source>
+                    <target>25</target>
                 </configuration>
             </plugin>
         </plugins>
@@ -37,32 +42,32 @@
         <dependency>
             <groupId>org.matsim</groupId>
             <artifactId>matsim</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>osm</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>dvrp</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
             <artifactId>drt-extensions</artifactId>
-            <version>2026.0-PR4219</version>
+            <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
