@@ -1,4 +1,3 @@
-
 package io.iteratively.matsim.offload;
 
 import org.mapdb.*;
@@ -20,8 +19,10 @@ public final class MapDbPlanStore implements PlanStore {
 
     private final org.matsim.api.core.v01.population.PopulationFactory populationFactory;
     private final FuryPlanCodec codec;
+    private final int maxPlansPerAgent;
 
-    public MapDbPlanStore(File file, Scenario scenario) {
+    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
+        this.maxPlansPerAgent = maxPlansPerAgent;
         this.db = DBMaker
                 .fileDB(file)
                 .fileMmapEnableIfSupported()
@@ -74,6 +75,20 @@ public final class MapDbPlanStore implements PlanStore {
             planIndexByPerson.put(personId, String.join(",", list));
         }
         if (makeSelected) { activePlanByPerson.put(personId, planId); }
+
+        enforcePlanLimit(personId);
+    }
+
+    private void enforcePlanLimit(String personId) {
+        List<PlanHeader> headers = listPlanHeaders(personId);
+        if (headers.size() <= maxPlansPerAgent) return;
+
+        String activeId = activePlanByPerson.get(personId);
+        headers.stream()
+                .filter(h -> !h.planId.equals(activeId))
+                .sorted(Comparator.comparingDouble(h -> h.score))
+                .limit(headers.size() - maxPlansPerAgent)
+                .forEach(h -> deletePlan(personId, h.planId));
     }
 
     @Override public void updateScore(String personId, String planId, double score, int iter) {

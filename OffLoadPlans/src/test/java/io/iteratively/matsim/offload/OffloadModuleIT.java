@@ -25,38 +25,38 @@ public class OffloadModuleIT {
 
     @Test
     public void testOffloadWithSiouxfalls() {
-        // Sioux Falls Szenario laden
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
-        
-        // Testspezifische Konfiguration
+
+        Path storeDir = tempDir.resolve("planstore");
+        OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
+        offloadConfig.setStoreDirectory(storeDir.toString());
+        offloadConfig.setCacheEntries(2000);
+
         config.controller().setOutputDirectory(tempDir.resolve("output").toString());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(2);
-        
+
         Scenario scenario = ScenarioUtils.loadScenario(config);
-        
-        // Controler mit OffloadModule starten
-        File dbFile = tempDir.resolve("plans.mapdb").toFile();
+
         Controler controler = new Controler(scenario);
-        controler.addOverridingModule(new OffloadModule(dbFile, 100));
-        
-        // Simulation ausführen
+        controler.addOverridingModule(new OffloadModule());
         controler.run();
-        
-        // Assertions
-        assertTrue(dbFile.exists(), "MapDB Datei sollte existiert");
-        assertTrue(dbFile.length() > 0, "MapDB Datei sollte Daten enthalten");
-        
-        // Verifizieren dass Pläne gespeichert wurden
-        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario)) {
+
+        File dbFile = storeDir.resolve(OffloadConfigGroup.DB_FILE_NAME).toFile();
+
+        assertTrue(dbFile.exists(), "MapDB file should exist");
+        assertTrue(dbFile.length() > 0, "MapDB file should contain data");
+
+        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
+                scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             int storedPlans = 0;
             for (Person person : scenario.getPopulation().getPersons().values()) {
                 var headers = store.listPlanHeaders(person.getId().toString());
                 storedPlans += headers.size();
             }
-            assertTrue(storedPlans > 0, "Es sollten Pläne im Store gespeichert sein");
+            assertTrue(storedPlans > 0, "Plans should be stored in the store");
         }
     }
 
@@ -64,33 +64,37 @@ public class OffloadModuleIT {
     public void testPlanMaterializationAfterSimulation() {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
-        
+
+        Path storeDir = tempDir.resolve("planstore2");
+        OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
+        offloadConfig.setStoreDirectory(storeDir.toString());
+
         config.controller().setOutputDirectory(tempDir.resolve("output2").toString());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(1);
-        
+
         Scenario scenario = ScenarioUtils.loadScenario(config);
-        File dbFile = tempDir.resolve("plans2.mapdb").toFile();
-        
+
         Controler controler = new Controler(scenario);
-        controler.addOverridingModule(new OffloadModule(dbFile, 50));
+        controler.addOverridingModule(new OffloadModule());
         controler.run();
-        
-        // Pläne nach Simulation materialisieren und prüfen
-        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario)) {
+
+        File dbFile = storeDir.resolve(OffloadConfigGroup.DB_FILE_NAME).toFile();
+
+        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
+                scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             String firstPersonId = scenario.getPopulation().getPersons().keySet()
                     .iterator().next().toString();
-            
+
             var headers = store.listPlanHeaders(firstPersonId);
-            assertFalse(headers.isEmpty(), "Person sollte mindestens einen Plan haben");
-            
+            assertFalse(headers.isEmpty(), "Person should have at least one plan");
+
             var header = headers.get(0);
             var plan = store.materialize(firstPersonId, header.planId);
-            
-            assertNotNull(plan, "Materialisierter Plan sollte nicht null sein");
-            assertFalse(plan.getPlanElements().isEmpty(), 
-                    "Plan sollte Elemente enthalten");
+
+            assertNotNull(plan, "Materialized plan should not be null");
+            assertFalse(plan.getPlanElements().isEmpty(), "Plan should contain elements");
         }
     }
 }
