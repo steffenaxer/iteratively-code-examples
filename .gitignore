@@ -2,3 +2,5 @@
 /target/
 /outputs/
 src/main/python/env
+/OffLoadPlans/target/
+/OffLoadPlans/test/output/
