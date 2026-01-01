@@ -154,6 +154,15 @@ cd OffLoadPlans
 mvn test
 ```
 
+Or run a specific test:
+```bash
+# Run the materialization constraint validation test
+mvn test -Dtest=OffloadModuleExampleTest
+
+# Or use the convenience script
+./run-test.sh
+```
+
 Key test classes:
 - `PlanProxyTest` - Tests proxy lifecycle and lazy loading
 - `OffloadModuleIT` - Integration test with full MATSim simulation
