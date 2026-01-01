@@ -27,6 +27,7 @@ public class OffloadModuleIT {
     public void testOffloadWithSiouxfalls() {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
+        config.controller().setLastIteration(15);
 
         Path storeDir = tempDir.resolve("planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
@@ -36,7 +37,8 @@ public class OffloadModuleIT {
         config.controller().setOutputDirectory(tempDir.resolve("output").toString());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
-        config.controller().setLastIteration(2);
+        config.controller().setLastIteration(20);
+        config.replanning().setMaxAgentPlanMemorySize(3);
 
         Scenario scenario = ScenarioUtils.loadScenario(config);
 

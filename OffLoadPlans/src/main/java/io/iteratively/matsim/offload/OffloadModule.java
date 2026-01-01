@@ -1,11 +1,16 @@
 package io.iteratively.matsim.offload;
 
+import com.google.inject.Inject;
+import com.google.inject.Provider;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
 import org.matsim.api.core.v01.Scenario;
+import org.matsim.api.core.v01.population.Person;
+import org.matsim.api.core.v01.population.Plan;
 import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.controler.AbstractModule;
-import org.matsim.core.replanning.selectors.PlanSelector;
+import org.matsim.core.controler.MatsimServices;
+import org.matsim.core.replanning.selectors.*;
 
 import java.io.File;
 
@@ -13,9 +18,9 @@ public final class OffloadModule extends AbstractModule {
 
     @Override
     public void install() {
-        bind(PlanSelector.class).to(HeaderBasedPlanSelector.class).in(Singleton.class);
         addControllerListenerBinding().to(OffloadIterationHooks.class);
         addControllerListenerBinding().to(PlanStoreShutdownListener.class).in(Singleton.class);
+        bindPlanSelectorForRemoval().toProvider(OffloadPlanSelectorProvider.class).in(Singleton.class);
     }
 
     @Provides
@@ -46,9 +51,32 @@ public final class OffloadModule extends AbstractModule {
         return new PlanCache(store, offloadConfig.getCacheEntries());
     }
 
-    @Provides
-    @Singleton
-    HeaderBasedPlanSelector provideSelector(PlanStore store) {
-        return new HeaderBasedPlanSelector(store);
+    static class OffloadPlanSelectorProvider implements Provider<PlanSelector<Plan, Person>> {
+        @Inject Scenario scenario;
+        @Inject PlanStore store;
+        @Inject MatsimServices matsimServices;
+
+        @Override
+        public PlanSelector<Plan, Person> get() {
+            // Hole den konfigurierten Selector-Namen und erstelle die MATSim-Standard-Instanz
+            String selectorName = scenario.getConfig().replanning().getPlanSelectorForRemoval();
+            PlanSelector<Plan, Person> delegate = createDelegateSelector(selectorName);
+
+            return (member) -> {
+                int currentIteration = matsimServices.getIterationNumber();
+                LazyOffloadPlanSelector selector = new LazyOffloadPlanSelector(delegate, store, currentIteration);
+                return selector.selectPlan(member);
+            };
+        }
+
+        private PlanSelector<Plan, Person> createDelegateSelector(String name) {
+            return switch (name) {
+                case "RandomPlanSelector" -> new RandomPlanSelector<>();
+                case "BestPlanSelector" -> new BestPlanSelector<>();
+                case "ExpBetaPlanSelector" -> new ExpBetaPlanSelector<>(scenario.getConfig().scoring());
+                case "WorstPlanSelector" -> new GenericWorstPlanForRemovalSelector<>();
+                default -> new GenericWorstPlanForRemovalSelector<>();
+            };
+        }
     }
 }

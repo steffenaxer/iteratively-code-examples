@@ -16,6 +16,7 @@ public final class MapDbPlanStore implements PlanStore {
     private final HTreeMap<String, Integer> planLastUsedIter;
     private final HTreeMap<String, String> activePlanByPerson;
     private final HTreeMap<String, String> planIndexByPerson;
+    private final HTreeMap<String, String> planTypes;
 
     private final org.matsim.api.core.v01.population.PopulationFactory populationFactory;
     private final FuryPlanCodec codec;
@@ -36,6 +37,7 @@ public final class MapDbPlanStore implements PlanStore {
         this.planLastUsedIter = db.hashMap("lastUsedIter", Serializer.STRING, Serializer.INTEGER).createOrOpen();
         this.activePlanByPerson = db.hashMap("activePlan", Serializer.STRING, Serializer.STRING).createOrOpen();
         this.planIndexByPerson = db.hashMap("planIndex", Serializer.STRING, Serializer.STRING).createOrOpen();
+        this.planTypes = db.hashMap("planTypes", Serializer.STRING, Serializer.STRING).createOrOpen();
 
         this.populationFactory = scenario.getPopulation().getFactory();
         this.codec = new FuryPlanCodec(populationFactory);
@@ -54,10 +56,11 @@ public final class MapDbPlanStore implements PlanStore {
         for (String pid : ids) {
             String k = key(personId, pid);
             double score = planScores.getOrDefault(k, Double.NEGATIVE_INFINITY);
+            String type = planTypes.get(k);
             int cIter = planCreationIter.getOrDefault(k, -1);
             int lIter = planLastUsedIter.getOrDefault(k, -1);
             boolean sel = pid.equals(activePlanByPerson.get(personId));
-            out.add(new PlanHeader(pid, score, cIter, lIter, sel));
+            out.add(new PlanHeader(pid, score, type, cIter, lIter, sel));
         }
         return out;
     }
@@ -67,6 +70,7 @@ public final class MapDbPlanStore implements PlanStore {
         String k = key(personId, planId);
         planBlobs.put(k, blob);
         planScores.put(k, score);
+        if (plan.getType() != null) planTypes.put(k, plan.getType());
         planCreationIter.putIfAbsent(k, iter);
         planLastUsedIter.put(k, iter);
         var list = new ArrayList<>(listPlanIds(personId));
@@ -118,6 +122,7 @@ public final class MapDbPlanStore implements PlanStore {
         planScores.remove(k);
         planCreationIter.remove(k);
         planLastUsedIter.remove(k);
+        planTypes.remove(k);
         var list = new ArrayList<>(listPlanIds(personId));
         list.remove(planId);
         if (list.isEmpty()) planIndexByPerson.remove(personId);
