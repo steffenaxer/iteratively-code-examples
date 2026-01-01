@@ -2,6 +2,7 @@ package io.iteratively.matsim.offload;
 
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
+
 import java.util.List;
 
 public final class OffloadSupport {
@@ -39,10 +40,36 @@ public final class OffloadSupport {
 
     public static void persistSelectedIfAny(Person p, PlanStore store, int iter) {
         Plan sel = p.getSelectedPlan();
+        if (sel == null) return;
+
         String personId = p.getId().toString();
         String planId = ensurePlanId(sel);
         double score = sel.getScore() == null ? Double.NEGATIVE_INFINITY : sel.getScore();
-        store.putPlan(personId, planId, sel, score, iter, true);
+
+        // Nur persistieren wenn sich etwas geändert hat
+        if (shouldPersist(sel)) {
+            store.putPlan(personId, planId, sel, score, iter, true);
+            markPersisted(sel);
+        }
+    }
+
+    private static boolean shouldPersist(Plan plan) {
+        Object lastHash = plan.getAttributes().getAttribute("offloadLastHash");
+        int currentHash = computePlanHash(plan);
+        return lastHash == null || (int) lastHash != currentHash;
+    }
+
+    private static void markPersisted(Plan plan) {
+        plan.getAttributes().putAttribute("offloadLastHash", computePlanHash(plan));
+    }
+
+    private static int computePlanHash(Plan plan) {
+        int hash = plan.getPlanElements().size();
+        hash = 31 * hash + (plan.getScore() != null ? plan.getScore().hashCode() : 0);
+        for (var element : plan.getPlanElements()) {
+            hash = 31 * hash + element.hashCode();
+        }
+        return hash;
     }
 
     private static String ensurePlanId(Plan plan) {

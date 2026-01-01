@@ -28,7 +28,7 @@ public final class FuryPlanCodec {
                 .requireClassRegistration(true)
                 .buildThreadSafeFury();
         fury.register(PlanDTO.class);
-        fury.register(PlanElemDTO.class);
+        fury.register(PlanElementDTO.class);
         fury.register(ActivityDTO.class);
         fury.register(LegDTO.class);
         fury.register(NetworkRouteDTO.class);

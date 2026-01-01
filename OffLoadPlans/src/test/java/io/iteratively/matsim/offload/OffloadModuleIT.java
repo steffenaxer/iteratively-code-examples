@@ -1,7 +1,7 @@
 package io.iteratively.matsim.offload;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.core.config.Config;
@@ -11,30 +11,28 @@ import org.matsim.core.controler.OutputDirectoryHierarchy;
 import org.matsim.core.scenario.ScenarioUtils;
 import org.matsim.core.utils.io.IOUtils;
 import org.matsim.examples.ExamplesUtils;
+import org.matsim.testcases.MatsimTestUtils;
 
 import java.io.File;
 import java.net.URL;
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class OffloadModuleIT {
 
-    @TempDir
-    Path tempDir;
+    @RegisterExtension private MatsimTestUtils utils = new MatsimTestUtils();
 
     @Test
     public void testOffloadWithSiouxfalls() {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
-        config.controller().setLastIteration(15);
 
-        Path storeDir = tempDir.resolve("planstore");
+        File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
-        offloadConfig.setStoreDirectory(storeDir.toString());
+        offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
         offloadConfig.setCacheEntries(2000);
 
-        config.controller().setOutputDirectory(tempDir.resolve("output").toString());
+        config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(20);
@@ -46,7 +44,7 @@ public class OffloadModuleIT {
         controler.addOverridingModule(new OffloadModule());
         controler.run();
 
-        File dbFile = storeDir.resolve(OffloadConfigGroup.DB_FILE_NAME).toFile();
+        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
 
         assertTrue(dbFile.exists(), "MapDB file should exist");
         assertTrue(dbFile.length() > 0, "MapDB file should contain data");
@@ -67,11 +65,11 @@ public class OffloadModuleIT {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
 
-        Path storeDir = tempDir.resolve("planstore2");
+        File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
-        offloadConfig.setStoreDirectory(storeDir.toString());
+        offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
 
-        config.controller().setOutputDirectory(tempDir.resolve("output2").toString());
+        config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(1);
@@ -82,7 +80,7 @@ public class OffloadModuleIT {
         controler.addOverridingModule(new OffloadModule());
         controler.run();
 
-        File dbFile = storeDir.resolve(OffloadConfigGroup.DB_FILE_NAME).toFile();
+        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
 
         try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {

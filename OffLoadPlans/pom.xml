@@ -34,6 +34,14 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.matsim</groupId>
+            <artifactId>matsim</artifactId>
+            <version>${matsim.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
         <!-- MapDB -->
         <dependency>
             <groupId>org.mapdb</groupId>

@@ -1,7 +1,7 @@
 
 package io.iteratively.matsim.offload.dto;
 
-public final class ActivityDTO implements PlanElemDTO {
+public final class ActivityDTO implements PlanElementDTO {
     public String type;
     public String linkId;   // optional
     public double[] coord;  // optional [x,y]
