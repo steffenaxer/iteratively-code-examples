@@ -21,9 +21,13 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
     }
 
     @Override public void notifyIterationStarts(IterationStartsEvent event) {
+        int iter = event.getIteration();
         var pop = event.getServices().getScenario().getPopulation();
+        
+        // Load all plans as proxies for each person
+        // This allows ChangeExpBeta and other selectors to work on all plans
         for (Person p : pop.getPersons().values()) {
-            OffloadSupport.ensureSelectedMaterialized(p, store, cache);
+            OffloadSupport.loadAllPlansAsProxies(p, store, iter);
         }
         store.commit();
     }
@@ -31,8 +35,11 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
     @Override public void notifyIterationEnds(IterationEndsEvent event) {
         int iter = event.getIteration();
         var pop = event.getServices().getScenario().getPopulation();
+        
+        // Persist all materialized plans (those that were modified)
+        // and update scores for all plans
         for (Person p : pop.getPersons().values()) {
-            OffloadSupport.persistSelectedIfAny(p, store, iter);
+            OffloadSupport.persistAllMaterialized(p, store, iter);
             p.getPlans().clear();
         }
         store.commit();
