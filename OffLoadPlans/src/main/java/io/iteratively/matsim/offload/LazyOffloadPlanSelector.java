@@ -65,7 +65,7 @@ public final class LazyOffloadPlanSelector implements PlanSelector<Plan, Person>
 
         // Create lightweight proxies for selection
         List<Plan> proxies = headers.stream()
-                .map(h -> new PlanProxy(h, person, store, currentIteration))
+                .map(h -> new PlanProxy(h, person, store))
                 .collect(Collectors.toList());
 
         // Temporary person with proxies for the delegate selector

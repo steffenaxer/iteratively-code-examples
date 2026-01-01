@@ -10,34 +10,104 @@ public final class OffloadSupport {
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
 
-    public static void ensureSelectedMaterialized(Person p, PlanStore store, PlanCache cache) {
+    /**
+     * Loads all plans for a person as lightweight proxies.
+     * This keeps all plan scores in memory for proper plan selection.
+     */
+    public static void loadAllPlansAsProxies(Person p, PlanStore store) {
         String personId = p.getId().toString();
-        String active = store.getActivePlanId(personId).orElse(null);
-        if (active == null) return;
-        List<? extends Plan> plans = p.getPlans();
-        if (plans.size() == 1 && plans.get(0) == p.getSelectedPlan()) return;
+        List<PlanHeader> headers = store.listPlanHeaders(personId);
+        
         p.getPlans().clear();
-        Plan selected = cache.materialize(personId, active);
-        Double score = store.listPlanHeaders(personId).stream()
-                .filter(h -> h.planId.equals(active))
-                .map(h -> h.score)
-                .findFirst().orElse(null);
-        selected.setScore(score);
-        p.addPlan(selected);
-        p.setSelectedPlan(selected);
+        
+        for (PlanHeader h : headers) {
+            PlanProxy proxy = new PlanProxy(h, p, store);
+            p.addPlan(proxy);
+            if (h.selected) {
+                p.setSelectedPlan(proxy);
+            }
+        }
+    }
+
+    /**
+     * Persists all materialized plans back to the store.
+     * Only saves plans that were actually materialized and modified.
+     */
+    public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
+        String personId = p.getId().toString();
+        
+        for (Plan plan : p.getPlans()) {
+            if (plan instanceof PlanProxy proxy) {
+                if (proxy.isMaterialized()) {
+                    Plan materialized = proxy.getMaterializedPlan();
+                    if (shouldPersist(materialized)) {
+                        String planId = proxy.getPlanId();
+                        double score = proxy.getScore() != null ? proxy.getScore() : Double.NEGATIVE_INFINITY;
+                        boolean isSelected = (plan == p.getSelectedPlan());
+                        store.putPlan(personId, planId, materialized, score, iter, isSelected);
+                        markPersisted(materialized);
+                    }
+                    // Dematerialize to save memory
+                    proxy.dematerialize();
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a new plan as a proxy to the person.
+     */
+    public static void addNewPlan(Person p, Plan plan, PlanStore store, int iter) {
+        String personId = p.getId().toString();
+        String planId = ensurePlanId(plan);
+        double score = plan.getScore() != null ? plan.getScore() : Double.NEGATIVE_INFINITY;
+        
+        // Persist the new plan
+        store.putPlan(personId, planId, plan, score, iter, false);
+        markPersisted(plan);
+        
+        // Add as proxy
+        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, score);
+        p.addPlan(proxy);
+    }
+
+    public static void ensureSelectedMaterialized(Person p, PlanStore store, PlanCache cache) {
+        Plan selected = p.getSelectedPlan();
+        if (selected == null) return;
+        
+        if (selected instanceof PlanProxy proxy) {
+            // Ensure the proxy is materialized
+            proxy.getMaterializedPlan();
+        } else {
+            // Already a regular plan, nothing to do
+        }
     }
 
     public static void swapSelectedPlanTo(Person p, PlanStore store, String newPlanId) {
         String personId = p.getId().toString();
+        
+        // Find the proxy with matching planId
+        for (Plan plan : p.getPlans()) {
+            if (plan instanceof PlanProxy proxy) {
+                if (proxy.getPlanId().equals(newPlanId)) {
+                    p.setSelectedPlan(proxy);
+                    store.setActivePlanId(personId, newPlanId);
+                    return;
+                }
+            }
+        }
+        
+        // Fallback: not found in proxies, load it
         Plan newPlan = store.materialize(personId, newPlanId);
-        p.getPlans().clear();
         Double score = store.listPlanHeaders(personId).stream()
                 .filter(h -> h.planId.equals(newPlanId))
                 .map(h -> h.score)
                 .findFirst().orElse(null);
         newPlan.setScore(score);
+        p.getPlans().clear();
         p.addPlan(newPlan);
         p.setSelectedPlan(newPlan);
+        store.setActivePlanId(personId, newPlanId);
     }
 
     public static PersistTask preparePersist(Person p, FuryPlanCodec codec) {

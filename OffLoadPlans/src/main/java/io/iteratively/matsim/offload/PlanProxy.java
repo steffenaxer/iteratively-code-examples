@@ -13,26 +13,39 @@ import java.util.Map;
  */
 public final class PlanProxy implements Plan {
 
-    private final PlanHeader header;
+    private final String planId;
     private final Person person;
     private final PlanStore store;
-    private final int currentIteration;
+    private final String type;
+    private final int creationIter;
+    private Double score;
     private Plan materializedPlan;
 
-    public PlanProxy(PlanHeader header, Person person, PlanStore store, int currentIteration) {
-        this.header = header;
+    public PlanProxy(PlanHeader header, Person person, PlanStore store) {
+        this.planId = header.planId;
         this.person = person;
         this.store = store;
-        this.currentIteration = currentIteration;
+        this.type = header.type;
+        this.creationIter = header.creationIter;
+        this.score = header.score;
+    }
+
+    public PlanProxy(String planId, Person person, PlanStore store, String type, int creationIter, Double score) {
+        this.planId = planId;
+        this.person = person;
+        this.store = store;
+        this.type = type;
+        this.creationIter = creationIter;
+        this.score = score;
     }
 
     public String getPlanId() {
-        return header.planId;
+        return planId;
     }
 
     @Override
     public Id<Plan> getId() {
-        return Id.create(header.planId, Plan.class);
+        return Id.create(planId, Plan.class);
     }
 
     @Override
@@ -43,18 +56,20 @@ public final class PlanProxy implements Plan {
 
     @Override
     public Double getScore() {
-        return header.score;
+        return score;
     }
 
     @Override
     public void setScore(Double score) {
-        header.score = score != null ? score : Double.NaN;
-        store.updateScore(person.getId().toString(), header.planId, header.score, currentIteration);
+        this.score = score != null ? score : Double.NaN;
+        int currentIter = materializedPlan != null ? 
+            materializedPlan.getIterationCreated() : creationIter;
+        store.updateScore(person.getId().toString(), planId, this.score, currentIter);
     }
 
     @Override
     public String getType() {
-        return header.type;
+        return type;
     }
 
     @Override
@@ -100,7 +115,7 @@ public final class PlanProxy implements Plan {
 
     private void materializeIfNeeded() {
         if (materializedPlan == null) {
-            materializedPlan = store.materialize(person.getId().toString(), header.planId);
+            materializedPlan = store.materialize(person.getId().toString(), planId);
         }
     }
 
@@ -111,13 +126,17 @@ public final class PlanProxy implements Plan {
 
     @Override
     public int getIterationCreated() {
-        return header.creationIter;
+        return creationIter;
     }
 
     @Override
     public void setIterationCreated(int iteration) {
         // creationIter ist immutable im Proxy
         throw new UnsupportedOperationException("Cannot change iterationCreated on PlanProxy");
+    }
+    
+    public void dematerialize() {
+        this.materializedPlan = null;
     }
 
     @Override
