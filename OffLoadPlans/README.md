@@ -112,6 +112,8 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ## Usage Example
 
+See `OffloadModuleExample.java` in the test sources for a complete working example.
+
 ```java
 Config config = ConfigUtils.loadConfig("config.xml");
 OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
