@@ -7,7 +7,6 @@ import org.matsim.api.core.v01.population.Plan;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 public final class MapDbPlanStore implements PlanStore {
     private final DB db;
@@ -19,34 +18,21 @@ public final class MapDbPlanStore implements PlanStore {
     private final HTreeMap<String, String> planIndexByPerson;
     private final HTreeMap<String, String> planTypes;
 
-    private final org.matsim.api.core.v01.population.PopulationFactory populationFactory;
     private final FuryPlanCodec codec;
     private final int maxPlansPerAgent;
-
-    // Async-Write Support
-    private final ExecutorService writeExecutor;
-    private final BlockingQueue<Runnable> pendingWrites;
     private final int batchSize;
     private int uncommittedWrites = 0;
 
-    // Cache für häufig gelesene Daten
     private final ConcurrentHashMap<String, List<String>> planIdCache;
     private final ConcurrentHashMap<String, String> activePlanCache;
 
     public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
-        this(file, scenario, maxPlansPerAgent, 100); // Default batch size
+        this(file, scenario, maxPlansPerAgent, 10_000);
     }
 
     public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent, int batchSize) {
         this.maxPlansPerAgent = maxPlansPerAgent;
         this.batchSize = batchSize;
-        this.pendingWrites = new LinkedBlockingQueue<>();
-        this.writeExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "MapDbPlanStore-Writer");
-            t.setDaemon(true);
-            return t;
-        });
-
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
 
@@ -65,8 +51,7 @@ public final class MapDbPlanStore implements PlanStore {
         this.planIndexByPerson = db.hashMap("planIndex", Serializer.STRING, Serializer.STRING).createOrOpen();
         this.planTypes = db.hashMap("planTypes", Serializer.STRING, Serializer.STRING).createOrOpen();
 
-        this.populationFactory = scenario.getPopulation().getFactory();
-        this.codec = new FuryPlanCodec(populationFactory);
+        this.codec = new FuryPlanCodec(scenario.getPopulation().getFactory());
     }
 
     private static String key(String personId, String planId) {
@@ -74,8 +59,12 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     @Override
+    public FuryPlanCodec getCodec() {
+        return codec;
+    }
+
+    @Override
     public Optional<String> getActivePlanId(String personId) {
-        // Cache-First
         String cached = activePlanCache.get(personId);
         if (cached != null) return Optional.of(cached);
         String active = activePlanByPerson.get(personId);
@@ -113,19 +102,20 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public void putPlan(String personId, String planId, Plan plan, double score, int iter, boolean makeSelected) {
-        // Serialisierung im Caller-Thread (kann parallelisiert werden)
         byte[] blob = codec.serialize(plan);
+        putPlanRaw(personId, planId, blob, score, iter, makeSelected);
         String planType = plan.getType();
+        if (planType != null) planTypes.put(key(personId, planId), planType);
+    }
 
-        // DB-Writes
+    @Override
+    public void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected) {
         String k = key(personId, planId);
         planBlobs.put(k, blob);
         planScores.put(k, score);
-        if (planType != null) planTypes.put(k, planType);
         planCreationIter.putIfAbsent(k, iter);
         planLastUsedIter.put(k, iter);
 
-        // Plan-Index aktualisieren (mit Cache)
         updatePlanIndex(personId, planId);
 
         if (makeSelected) {
@@ -135,31 +125,6 @@ public final class MapDbPlanStore implements PlanStore {
 
         incrementUncommitted();
         enforcePlanLimit(personId);
-    }
-
-    /**
-     * Async-Variante für nicht-blockierendes Schreiben.
-     */
-    public void putPlanAsync(String personId, String planId, Plan plan, double score, int iter, boolean makeSelected) {
-        // Serialisierung sofort (Plan könnte sich ändern)
-        byte[] blob = codec.serialize(plan);
-        String planType = plan.getType();
-
-        writeExecutor.submit(() -> {
-            String k = key(personId, planId);
-            planBlobs.put(k, blob);
-            planScores.put(k, score);
-            if (planType != null) planTypes.put(k, planType);
-            planCreationIter.putIfAbsent(k, iter);
-            planLastUsedIter.put(k, iter);
-            updatePlanIndex(personId, planId);
-            if (makeSelected) {
-                activePlanCache.put(personId, planId);
-                activePlanByPerson.put(personId, planId);
-            }
-            incrementUncommitted();
-            enforcePlanLimit(personId);
-        });
     }
 
     private synchronized void updatePlanIndex(String personId, String planId) {
@@ -233,7 +198,6 @@ public final class MapDbPlanStore implements PlanStore {
         planLastUsedIter.remove(k);
         planTypes.remove(k);
 
-        // Cache und Index aktualisieren
         List<String> list = new ArrayList<>(listPlanIds(personId));
         list.remove(planId);
         if (list.isEmpty()) {
@@ -251,15 +215,6 @@ public final class MapDbPlanStore implements PlanStore {
         incrementUncommitted();
     }
 
-    /**
-     * Wartet auf alle ausstehenden async Writes.
-     */
-    public void flushAsync() throws InterruptedException {
-        CountDownLatch latch = new CountDownLatch(1);
-        writeExecutor.submit(latch::countDown);
-        latch.await();
-    }
-
     @Override
     public void commit() {
         db.commit();
@@ -268,12 +223,6 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public void close() {
-        writeExecutor.shutdown();
-        try {
-            writeExecutor.awaitTermination(30, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
         db.commit();
         db.close();
     }

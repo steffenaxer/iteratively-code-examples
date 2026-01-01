@@ -8,6 +8,8 @@ import java.util.List;
 public final class OffloadSupport {
     private OffloadSupport() {}
 
+    public record PersistTask(String personId, String planId, byte[] blob, double score) {}
+
     public static void ensureSelectedMaterialized(Person p, PlanStore store, PlanCache cache) {
         String personId = p.getId().toString();
         String active = store.getActivePlanId(personId).orElse(null);
@@ -38,6 +40,19 @@ public final class OffloadSupport {
         p.setSelectedPlan(newPlan);
     }
 
+    public static PersistTask preparePersist(Person p, FuryPlanCodec codec) {
+        Plan sel = p.getSelectedPlan();
+        if (sel == null || !shouldPersist(sel)) return null;
+
+        String personId = p.getId().toString();
+        String planId = ensurePlanId(sel);
+        double score = sel.getScore() == null ? Double.NEGATIVE_INFINITY : sel.getScore();
+        byte[] blob = codec.serialize(sel);
+
+        markPersisted(sel);
+        return new PersistTask(personId, planId, blob, score);
+    }
+
     public static void persistSelectedIfAny(Person p, PlanStore store, int iter) {
         Plan sel = p.getSelectedPlan();
         if (sel == null) return;
@@ -46,7 +61,6 @@ public final class OffloadSupport {
         String planId = ensurePlanId(sel);
         double score = sel.getScore() == null ? Double.NEGATIVE_INFINITY : sel.getScore();
 
-        // Nur persistieren wenn sich etwas geändert hat
         if (shouldPersist(sel)) {
             store.putPlan(personId, planId, sel, score, iter, true);
             markPersisted(sel);
