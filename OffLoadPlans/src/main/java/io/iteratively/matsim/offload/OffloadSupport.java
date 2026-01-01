@@ -13,13 +13,19 @@ public final class OffloadSupport {
     /**
      * Loads all plans for a person as lightweight proxies.
      * This keeps all plan scores in memory for proper plan selection.
+     * If no plans exist in the store, keeps the existing plans.
      */
     public static void loadAllPlansAsProxies(Person p, PlanStore store) {
         String personId = p.getId().toString();
         List<PlanHeader> headers = store.listPlanHeaders(personId);
-        
+
+        // Wichtig: Wenn keine Pläne im Store, behalte existierende Pläne
+        if (headers.isEmpty()) {
+            return;
+        }
+
         p.getPlans().clear();
-        
+
         for (PlanHeader h : headers) {
             PlanProxy proxy = new PlanProxy(h, p, store);
             p.addPlan(proxy);
@@ -35,7 +41,7 @@ public final class OffloadSupport {
      */
     public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
         String personId = p.getId().toString();
-        
+
         for (Plan plan : p.getPlans()) {
             if (plan instanceof PlanProxy proxy) {
                 if (proxy.isMaterialized()) {
@@ -47,8 +53,16 @@ public final class OffloadSupport {
                         store.putPlan(personId, planId, materialized, score, iter, isSelected);
                         markPersisted(materialized);
                     }
-                    // Dematerialize to save memory
                     proxy.dematerialize();
+                }
+            } else {
+                // Regulärer Plan (nicht Proxy) - auch persistieren
+                if (shouldPersist(plan)) {
+                    String planId = ensurePlanId(plan);
+                    double score = plan.getScore() != null ? plan.getScore() : Double.NEGATIVE_INFINITY;
+                    boolean isSelected = (plan == p.getSelectedPlan());
+                    store.putPlan(personId, planId, plan, score, iter, isSelected);
+                    markPersisted(plan);
                 }
             }
         }
@@ -61,12 +75,10 @@ public final class OffloadSupport {
         String personId = p.getId().toString();
         String planId = ensurePlanId(plan);
         double score = plan.getScore() != null ? plan.getScore() : Double.NEGATIVE_INFINITY;
-        
-        // Persist the new plan
+
         store.putPlan(personId, planId, plan, score, iter, false);
         markPersisted(plan);
-        
-        // Add as proxy
+
         PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, score);
         p.addPlan(proxy);
     }
@@ -74,19 +86,15 @@ public final class OffloadSupport {
     public static void ensureSelectedMaterialized(Person p, PlanStore store, PlanCache cache) {
         Plan selected = p.getSelectedPlan();
         if (selected == null) return;
-        
+
         if (selected instanceof PlanProxy proxy) {
-            // Ensure the proxy is materialized
             proxy.getMaterializedPlan();
-        } else {
-            // Already a regular plan, nothing to do
         }
     }
 
     public static void swapSelectedPlanTo(Person p, PlanStore store, String newPlanId) {
         String personId = p.getId().toString();
-        
-        // Find the proxy with matching planId
+
         for (Plan plan : p.getPlans()) {
             if (plan instanceof PlanProxy proxy) {
                 if (proxy.getPlanId().equals(newPlanId)) {
@@ -96,8 +104,7 @@ public final class OffloadSupport {
                 }
             }
         }
-        
-        // Fallback: not found in proxies, load it
+
         Plan newPlan = store.materialize(personId, newPlanId);
         Double score = store.listPlanHeaders(personId).stream()
                 .filter(h -> h.planId.equals(newPlanId))
@@ -159,7 +166,7 @@ public final class OffloadSupport {
     private static String ensurePlanId(Plan plan) {
         Object attr = plan.getAttributes().getAttribute("offloadPlanId");
         if (attr instanceof String s) return s;
-        String pid = "p" + Math.abs(plan.getPlanElements().hashCode());
+        String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());
         plan.getAttributes().putAttribute("offloadPlanId", pid);
         return pid;
     }

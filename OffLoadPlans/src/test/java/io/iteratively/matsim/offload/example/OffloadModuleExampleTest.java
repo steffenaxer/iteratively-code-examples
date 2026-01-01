@@ -49,21 +49,18 @@ public class OffloadModuleExampleTest {
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
-        config.controller().setLastIteration(2); // Short test
+        config.controller().setLastIteration(2);
         config.replanning().setMaxAgentPlanMemorySize(3);
 
         Scenario scenario = ScenarioUtils.loadScenario(config);
 
         Controler controler = new Controler(scenario);
         controler.addOverridingModule(new OffloadModule());
-        
-        // Add listener to verify materialization constraint
+
         controler.addControlerListener(new MaterializationValidator());
 
-        // Run the simulation
         controler.run();
 
-        // Verify MapDB file exists
         File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
         assertTrue(dbFile.exists(), "MapDB file should exist");
         assertTrue(dbFile.length() > 0, "MapDB file should contain data");
@@ -83,29 +80,27 @@ public class OffloadModuleExampleTest {
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(3);
-        config.replanning().setMaxAgentPlanMemorySize(5); // Allow multiple plans
+        config.replanning().setMaxAgentPlanMemorySize(5);
 
         Scenario scenario = ScenarioUtils.loadScenario(config);
 
         Controler controler = new Controler(scenario);
         controler.addOverridingModule(new OffloadModule());
 
-        // Track maximum materialized plans
         AtomicInteger maxMaterializedPlans = new AtomicInteger(0);
         AtomicInteger maxMaterializedPerPerson = new AtomicInteger(0);
 
         controler.addControlerListener(new IterationStartsListener() {
             @Override
             public void notifyIterationStarts(IterationStartsEvent event) {
-                // After iteration starts, check materialization
                 var pop = event.getServices().getScenario().getPopulation();
-                
-                int totalMaterialized = 0;
-                int maxPerPerson = 0;
-                
+
+                final int[] totalMaterialized = {0};
+                final int[] maxPerPerson = {0};
+
                 for (Person person : pop.getPersons().values()) {
                     int materializedForPerson = 0;
-                    
+
                     for (Plan plan : person.getPlans()) {
                         if (plan instanceof PlanProxy proxy) {
                             if (proxy.isMaterialized()) {
@@ -113,28 +108,27 @@ public class OffloadModuleExampleTest {
                             }
                         }
                     }
-                    
-                    totalMaterialized += materializedForPerson;
-                    maxPerPerson = Math.max(maxPerPerson, materializedForPerson);
+
+                    totalMaterialized[0] += materializedForPerson;
+                    maxPerPerson[0] = Math.max(maxPerPerson[0], materializedForPerson);
                 }
-                
-                maxMaterializedPlans.updateAndGet(v -> Math.max(v, totalMaterialized));
-                maxMaterializedPerPerson.updateAndGet(v -> Math.max(v, maxPerPerson));
-                
-                System.out.println("Iteration " + event.getIteration() + 
-                    " start: Total materialized=" + totalMaterialized + 
-                    ", Max per person=" + maxPerPerson);
+
+                maxMaterializedPlans.updateAndGet(v -> Math.max(v, totalMaterialized[0]));
+                maxMaterializedPerPerson.updateAndGet(v -> Math.max(v, maxPerPerson[0]));
+
+                System.out.println("Iteration " + event.getIteration() +
+                        " start: Total materialized=" + totalMaterialized[0] +
+                        ", Max per person=" + maxPerPerson[0]);
             }
         });
 
         controler.addControlerListener(new IterationEndsListener() {
             @Override
             public void notifyIterationEnds(IterationEndsEvent event) {
-                // After iteration ends and dematerialization, verify no plans are materialized
                 var pop = event.getServices().getScenario().getPopulation();
-                
+
                 int totalMaterialized = 0;
-                
+
                 for (Person person : pop.getPersons().values()) {
                     for (Plan plan : person.getPlans()) {
                         if (plan instanceof PlanProxy proxy) {
@@ -144,41 +138,36 @@ public class OffloadModuleExampleTest {
                         }
                     }
                 }
-                
-                System.out.println("Iteration " + event.getIteration() + 
-                    " end: Total materialized=" + totalMaterialized);
-                
-                // After dematerialization, should be 0
-                assertEquals(0, totalMaterialized, 
-                    "After iteration end, all plans should be dematerialized");
+
+                System.out.println("Iteration " + event.getIteration() +
+                        " end: Total materialized=" + totalMaterialized);
+
+                assertEquals(0, totalMaterialized,
+                        "After iteration end, all plans should be dematerialized");
             }
         });
 
         controler.run();
 
-        // Verify constraint: at most 1 plan materialized per person
         assertTrue(maxMaterializedPerPerson.get() <= 1,
-            "At most 1 plan should be materialized per person, but found: " + 
-            maxMaterializedPerPerson.get());
-        
+                "At most 1 plan should be materialized per person, but found: " +
+                        maxMaterializedPerPerson.get());
+
         System.out.println("\nTest Summary:");
         System.out.println("Max materialized plans total: " + maxMaterializedPlans.get());
         System.out.println("Max materialized per person: " + maxMaterializedPerPerson.get());
     }
 
-    /**
-     * Validates that at most 1 plan is materialized per person during the simulation.
-     */
     private static class MaterializationValidator implements IterationStartsListener, IterationEndsListener {
-        
+
         @Override
         public void notifyIterationStarts(IterationStartsEvent event) {
             var pop = event.getServices().getScenario().getPopulation();
-            
+
             for (Person person : pop.getPersons().values()) {
                 int materializedCount = 0;
                 int proxyCount = 0;
-                
+
                 for (Plan plan : person.getPlans()) {
                     if (plan instanceof PlanProxy proxy) {
                         proxyCount++;
@@ -187,24 +176,21 @@ public class OffloadModuleExampleTest {
                         }
                     }
                 }
-                
-                // After loading proxies and materializing selected, should have:
-                // - Multiple proxies (all plans)
-                // - At most 1 materialized
+
                 assertTrue(proxyCount > 0, "Person should have proxy plans");
-                assertTrue(materializedCount <= 1, 
-                    "At most 1 plan should be materialized per person at iteration start, found: " + 
-                    materializedCount + " for person " + person.getId());
+                assertTrue(materializedCount <= 1,
+                        "At most 1 plan should be materialized per person at iteration start, found: " +
+                                materializedCount + " for person " + person.getId());
             }
         }
-        
+
         @Override
         public void notifyIterationEnds(IterationEndsEvent event) {
             var pop = event.getServices().getScenario().getPopulation();
-            
+
             for (Person person : pop.getPersons().values()) {
                 int materializedCount = 0;
-                
+
                 for (Plan plan : person.getPlans()) {
                     if (plan instanceof PlanProxy proxy) {
                         if (proxy.isMaterialized()) {
@@ -212,10 +198,9 @@ public class OffloadModuleExampleTest {
                         }
                     }
                 }
-                
-                // After dematerialization, should be 0
+
                 assertEquals(0, materializedCount,
-                    "After iteration end, no plans should be materialized for person " + person.getId());
+                        "After iteration end, no plans should be materialized for person " + person.getId());
             }
         }
     }

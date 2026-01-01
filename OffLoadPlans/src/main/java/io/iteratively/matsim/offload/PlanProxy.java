@@ -10,15 +10,19 @@ import java.util.Map;
 /**
  * Lightweight plan proxy that holds only header data.
  * Avoids loading full plans into memory during selection.
+ * Score and type are cached separately to allow comparisons without materialization.
  */
 public final class PlanProxy implements Plan {
 
     private final String planId;
     private final Person person;
     private final PlanStore store;
-    private final String type;
     private final int creationIter;
+
+    // Cached values - work without materialization
     private Double score;
+    private String type;
+
     private Plan materializedPlan;
 
     public PlanProxy(PlanHeader header, Person person, PlanStore store) {
@@ -30,7 +34,8 @@ public final class PlanProxy implements Plan {
         this.score = header.score;
     }
 
-    public PlanProxy(String planId, Person person, PlanStore store, String type, int creationIter, Double score) {
+    public PlanProxy(String planId, Person person, PlanStore store, String type,
+                     int creationIter, Double score) {
         this.planId = planId;
         this.person = person;
         this.store = store;
@@ -50,33 +55,47 @@ public final class PlanProxy implements Plan {
 
     @Override
     public void setPlanId(Id<Plan> planId) {
-        // Plan-ID ist immutable im Proxy
         throw new UnsupportedOperationException("Cannot change planId on PlanProxy");
     }
 
+    // --- Score: works without materialization ---
+
     @Override
     public Double getScore() {
+        if (materializedPlan != null) {
+            return materializedPlan.getScore();
+        }
         return score;
     }
 
     @Override
     public void setScore(Double score) {
         this.score = score != null ? score : Double.NaN;
-        int currentIter = materializedPlan != null ? 
-            materializedPlan.getIterationCreated() : creationIter;
-        store.updateScore(person.getId().toString(), planId, this.score, currentIter);
+        if (materializedPlan != null) {
+            materializedPlan.setScore(this.score);
+        }
+        store.updateScore(person.getId().toString(), planId, this.score, creationIter);
     }
+
+    // --- Type: works without materialization ---
 
     @Override
     public String getType() {
+        if (materializedPlan != null) {
+            return materializedPlan.getType();
+        }
         return type;
     }
 
     @Override
     public void setType(String type) {
-        materializeIfNeeded();
-        materializedPlan.setType(type);
+        this.type = type;
+        if (materializedPlan != null) {
+            materializedPlan.setType(type);
+        }
     }
+
+    // --- Person: works without materialization ---
 
     @Override
     public Person getPerson() {
@@ -85,9 +104,41 @@ public final class PlanProxy implements Plan {
 
     @Override
     public void setPerson(Person person) {
-        materializeIfNeeded();
-        materializedPlan.setPerson(person);
+        if (materializedPlan != null) {
+            materializedPlan.setPerson(person);
+        }
     }
+
+    // --- Iteration: works without materialization ---
+
+    @Override
+    public int getIterationCreated() {
+        return creationIter;
+    }
+
+    @Override
+    public void setIterationCreated(int iteration) {
+        throw new UnsupportedOperationException("Cannot change iterationCreated on PlanProxy");
+    }
+
+    // --- PlanMutator: delegate to materialized plan or return null ---
+
+    @Override
+    public String getPlanMutator() {
+        if (materializedPlan != null) {
+            return materializedPlan.getPlanMutator();
+        }
+        return null;
+    }
+
+    @Override
+    public void setPlanMutator(String mutator) {
+        if (materializedPlan != null) {
+            materializedPlan.setPlanMutator(mutator);
+        }
+    }
+
+    // --- Methods requiring materialization ---
 
     @Override
     public List<PlanElement> getPlanElements() {
@@ -113,9 +164,28 @@ public final class PlanProxy implements Plan {
         return materializedPlan.getAttributes();
     }
 
+    @Override
+    public Map<String, Object> getCustomAttributes() {
+        materializeIfNeeded();
+        return materializedPlan.getCustomAttributes();
+    }
+
+    // --- Materialization control ---
+
     private void materializeIfNeeded() {
         if (materializedPlan == null) {
             materializedPlan = store.materialize(person.getId().toString(), planId);
+            if (materializedPlan == null) {
+                throw new IllegalStateException(
+                        "Failed to materialize plan: personId=" + person.getId() +
+                                ", planId=" + planId + ". Plan not found in store.");
+            }
+            if (score != null) {
+                materializedPlan.setScore(score);
+            }
+            if (type != null) {
+                materializedPlan.setType(type);
+            }
         }
     }
 
@@ -124,41 +194,22 @@ public final class PlanProxy implements Plan {
         return materializedPlan;
     }
 
-    @Override
-    public int getIterationCreated() {
-        return creationIter;
-    }
-
-    @Override
-    public void setIterationCreated(int iteration) {
-        // creationIter ist immutable im Proxy
-        throw new UnsupportedOperationException("Cannot change iterationCreated on PlanProxy");
-    }
-    
-    public void dematerialize() {
-        this.materializedPlan = null;
-    }
-
-    @Override
-    public String getPlanMutator() {
-        materializeIfNeeded();
-        return materializedPlan.getPlanMutator();
-    }
-
-    @Override
-    public void setPlanMutator(String mutator) {
-        materializeIfNeeded();
-        materializedPlan.setPlanMutator(mutator);
-    }
-
-    @Override
-    public Map<String, Object> getCustomAttributes() {
-        materializeIfNeeded();
-        return materializedPlan.getCustomAttributes();
-    }
-
-
     public boolean isMaterialized() {
         return materializedPlan != null;
+    }
+
+    public void dematerialize() {
+        if (materializedPlan != null) {
+            this.score = materializedPlan.getScore();
+            this.type = materializedPlan.getType();
+            this.materializedPlan = null;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "PlanProxy[planId=" + planId + ", personId=" + person.getId() +
+                ", score=" + score + ", type=" + type +
+                ", materialized=" + isMaterialized() + "]";
     }
 }
