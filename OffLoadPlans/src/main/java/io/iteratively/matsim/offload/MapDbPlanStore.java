@@ -7,69 +7,103 @@ import org.mapdb.serializer.SerializerCompressionWrapper;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Plan;
 
-import java.io.File;
+import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 public final class MapDbPlanStore implements PlanStore {
     private static final Logger log = LogManager.getLogger(MapDbPlanStore.class);
+    private static final Pattern COMMA_PATTERN = Pattern.compile(",");
 
     private final DB db;
-    private final HTreeMap<String, byte[]> planBlobs;
-    private final HTreeMap<String, Double> planScores;
-    private final HTreeMap<String, Integer> planCreationIter;
-    private final HTreeMap<String, Integer> planLastUsedIter;
+    private final HTreeMap<String, byte[]> planDataMap;  // Konsolidiert: blob + metadata
     private final HTreeMap<String, String> activePlanByPerson;
     private final HTreeMap<String, String> planIndexByPerson;
-    private final HTreeMap<String, String> planTypes;
 
     private final FuryPlanCodec codec;
     private final int maxPlansPerAgent;
-    private final int batchSize;
-    private int uncommittedWrites = 0;
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
     private final ConcurrentHashMap<String, String> activePlanCache;
 
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
-    private static final int WRITE_BUFFER_SIZE = 5000;
+    private static final int WRITE_BUFFER_SIZE = 50_000;  // Größerer Buffer
 
-    private record PendingWrite(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected) {}
+    // Konsolidiertes Datenformat für alle Plan-Metadaten
+    private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type) implements Serializable {
+        byte[] serialize() {
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                 DataOutputStream dos = new DataOutputStream(baos)) {
+                dos.writeInt(blob.length);
+                dos.write(blob);
+                dos.writeDouble(score);
+                dos.writeInt(creationIter);
+                dos.writeInt(lastUsedIter);
+                dos.writeBoolean(type != null);
+                if (type != null) dos.writeUTF(type);
+                return baos.toByteArray();
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
 
-    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
-        this(file, scenario, maxPlansPerAgent, 10_000);
+        static PlanData deserialize(byte[] data) {
+            try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
+                 DataInputStream dis = new DataInputStream(bais)) {
+                int blobLen = dis.readInt();
+                byte[] blob = new byte[blobLen];
+                dis.readFully(blob);
+                double score = dis.readDouble();
+                int creationIter = dis.readInt();
+                int lastUsedIter = dis.readInt();
+                String type = dis.readBoolean() ? dis.readUTF() : null;
+                return new PlanData(blob, score, creationIter, lastUsedIter, type);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
     }
 
-    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent, int batchSize) {
+    private record PendingWrite(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {}
+
+    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
         this.maxPlansPerAgent = maxPlansPerAgent;
-        this.batchSize = batchSize;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
 
         this.db = DBMaker
                 .fileDB(file)
                 .fileMmapEnableIfSupported()
-                .allocateStartSize(128 * 1024 * 1024)
-                .allocateIncrement(16 * 1024 * 1024)
+                .allocateStartSize(512 * 1024 * 1024)
+                .allocateIncrement(256 * 1024 * 1024)
                 .fileMmapPreclearDisable()
+                .executorEnable()  // Async writes
                 .closeOnJvmShutdown()
                 .make();
 
-        this.planBlobs = db.hashMap("plans", Serializer.STRING,
+        // Nur noch 3 Maps statt 7
+        this.planDataMap = db.hashMap("planData", Serializer.STRING,
                         new SerializerCompressionWrapper<>(Serializer.BYTE_ARRAY))
                 .createOrOpen();
-        this.planScores = db.hashMap("scores", Serializer.STRING, Serializer.DOUBLE).createOrOpen();
-        this.planCreationIter = db.hashMap("creationIter", Serializer.STRING, Serializer.INTEGER).createOrOpen();
-        this.planLastUsedIter = db.hashMap("lastUsedIter", Serializer.STRING, Serializer.INTEGER).createOrOpen();
         this.activePlanByPerson = db.hashMap("activePlan", Serializer.STRING, Serializer.STRING).createOrOpen();
         this.planIndexByPerson = db.hashMap("planIndex", Serializer.STRING, Serializer.STRING).createOrOpen();
-        this.planTypes = db.hashMap("planTypes", Serializer.STRING, Serializer.STRING).createOrOpen();
 
         this.codec = new FuryPlanCodec(scenario.getPopulation().getFactory());
     }
 
     private static String key(String personId, String planId) {
         return personId + "|" + planId;
+    }
+
+    private static String joinPlanIds(List<String> ids) {
+        if (ids.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(ids.size() * 12);
+        sb.append(ids.get(0));
+        for (int i = 1; i < ids.size(); i++) {
+            sb.append(',').append(ids.get(i));
+        }
+        return sb.toString();
     }
 
     @Override
@@ -90,7 +124,6 @@ public final class MapDbPlanStore implements PlanStore {
     public void setActivePlanId(String personId, String planId) {
         activePlanCache.put(personId, planId);
         activePlanByPerson.put(personId, planId);
-        incrementUncommitted();
     }
 
     @Override
@@ -103,29 +136,52 @@ public final class MapDbPlanStore implements PlanStore {
 
         List<PlanHeader> out = new ArrayList<>(ids.size());
         for (String pid : ids) {
-            String k = key(personId, pid);
-            double score = planScores.getOrDefault(k, Double.NEGATIVE_INFINITY);
-            String type = planTypes.get(k);
-            int cIter = planCreationIter.getOrDefault(k, -1);
-            int lIter = planLastUsedIter.getOrDefault(k, -1);
-            boolean sel = pid.equals(activeId);
-            out.add(new PlanHeader(pid, score, type, cIter, lIter, sel));
+            PlanData data = getPlanData(personId, pid);
+            if (data != null) {
+                boolean sel = pid.equals(activeId);
+                out.add(new PlanHeader(pid, data.score, data.type, data.creationIter, data.lastUsedIter, sel));
+            }
         }
         return out;
+    }
+
+    private PlanData getPlanData(String personId, String planId) {
+        // Erst in pending writes suchen
+        synchronized (pendingWrites) {
+            for (int i = pendingWrites.size() - 1; i >= 0; i--) {
+                PendingWrite pw = pendingWrites.get(i);
+                if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
+                    return new PlanData(pw.blob, pw.score, pw.iter, pw.iter, pw.type);
+                }
+            }
+        }
+        byte[] raw = planDataMap.get(key(personId, planId));
+        return raw != null ? PlanData.deserialize(raw) : null;
     }
 
     @Override
     public void putPlan(String personId, String planId, Plan plan, double score, int iter, boolean makeSelected) {
         byte[] blob = codec.serialize(plan);
-        putPlanRaw(personId, planId, blob, score, iter, makeSelected);
         String planType = plan.getType();
-        if (planType != null) planTypes.put(key(personId, planId), planType);
+
+        synchronized (pendingWrites) {
+            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, planType));
+
+            updatePlanIndexCache(personId, planId);
+            if (makeSelected) {
+                activePlanCache.put(personId, planId);
+            }
+
+            if (pendingWrites.size() >= WRITE_BUFFER_SIZE) {
+                flushPendingWrites();
+            }
+        }
     }
 
     @Override
     public void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected) {
         synchronized (pendingWrites) {
-            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected));
+            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, null));
 
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
@@ -156,38 +212,46 @@ public final class MapDbPlanStore implements PlanStore {
         log.info("Flushing {} pending writes to MapDB...", pendingWrites.size());
         long start = System.currentTimeMillis();
 
-        Map<String, byte[]> blobBatch = new HashMap<>();
-        Map<String, Double> scoreBatch = new HashMap<>();
-        Map<String, Integer> creationBatch = new HashMap<>();
-        Map<String, Integer> lastUsedBatch = new HashMap<>();
-        Map<String, String> activeBatch = new HashMap<>();
-        Set<String> affectedPersons = new HashSet<>();
+        int size = pendingWrites.size();
+        Map<String, byte[]> dataBatch = new HashMap<>(size);
+        Map<String, String> activeBatch = new HashMap<>(size / 4 + 1);
+        Set<String> affectedPersons = new HashSet<>(size / 2 + 1);
 
+        // Gruppiere nach Key um nur den letzten Stand zu behalten
+        Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(size);
         for (PendingWrite pw : pendingWrites) {
             String k = key(pw.personId, pw.planId);
-            blobBatch.put(k, pw.blob);
-            scoreBatch.put(k, pw.score);
-            creationBatch.putIfAbsent(k, pw.iter);
-            lastUsedBatch.put(k, pw.iter);
+            latestByKey.put(k, pw);
             if (pw.makeSelected) {
                 activeBatch.put(pw.personId, pw.planId);
             }
             affectedPersons.add(pw.personId);
         }
 
-        planBlobs.putAll(blobBatch);
-        planScores.putAll(scoreBatch);
-        planCreationIter.putAll(creationBatch);
-        planLastUsedIter.putAll(lastUsedBatch);
-        activePlanByPerson.putAll(activeBatch);
-
-        for (String personId : affectedPersons) {
-            List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
-            planIndexByPerson.put(personId, String.join(",", currentIds));
+        for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
+            PendingWrite pw = entry.getValue();
+            // Hole existierende Daten für creationIter
+            byte[] existing = planDataMap.get(entry.getKey());
+            int creationIter = pw.iter;
+            if (existing != null) {
+                PlanData old = PlanData.deserialize(existing);
+                creationIter = old.creationIter;
+            }
+            PlanData data = new PlanData(pw.blob, pw.score, creationIter, pw.iter, pw.type);
+            dataBatch.put(entry.getKey(), data.serialize());
         }
 
+        planDataMap.putAll(dataBatch);
+        activePlanByPerson.putAll(activeBatch);
+
+        Map<String, String> indexBatch = new HashMap<>(affectedPersons.size());
+        for (String personId : affectedPersons) {
+            List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
+            indexBatch.put(personId, joinPlanIds(currentIds));
+        }
+        planIndexByPerson.putAll(indexBatch);
+
         pendingWrites.clear();
-        uncommittedWrites = 0;
 
         log.info("Flush completed in {} ms", System.currentTimeMillis() - start);
     }
@@ -198,10 +262,11 @@ public final class MapDbPlanStore implements PlanStore {
 
         String activeId = activePlanCache.get(personId);
 
-        List<Map.Entry<String, Double>> scored = new ArrayList<>();
+        List<Map.Entry<String, Double>> scored = new ArrayList<>(ids.size());
         for (String pid : ids) {
             if (!pid.equals(activeId)) {
-                double score = planScores.getOrDefault(key(personId, pid), Double.NEGATIVE_INFINITY);
+                PlanData data = getPlanData(personId, pid);
+                double score = data != null ? data.score : Double.NEGATIVE_INFINITY;
                 scored.add(Map.entry(pid, score));
             }
         }
@@ -234,41 +299,35 @@ public final class MapDbPlanStore implements PlanStore {
     private List<String> loadPlanIds(String personId) {
         String csv = planIndexByPerson.get(personId);
         if (csv == null || csv.isEmpty()) return new ArrayList<>();
-        return new ArrayList<>(Arrays.asList(csv.split(",")));
-    }
-
-    private synchronized void incrementUncommitted() {
-        uncommittedWrites++;
-        if (uncommittedWrites >= batchSize) {
-            uncommittedWrites = 0;
-        }
+        return new ArrayList<>(Arrays.asList(COMMA_PATTERN.split(csv)));
     }
 
     @Override
     public void updateScore(String personId, String planId, double score, int iter) {
-        String k = key(personId, planId);
-        planScores.put(k, score);
-        planLastUsedIter.put(k, iter);
-        incrementUncommitted();
+        PlanData existing = getPlanData(personId, planId);
+        if (existing != null) {
+            PlanData updated = new PlanData(existing.blob, score, existing.creationIter, iter, existing.type);
+            planDataMap.put(key(personId, planId), updated.serialize());
+        }
     }
 
     @Override
     public Plan materialize(String personId, String planId) {
-        synchronized (pendingWrites) {
-            if (!pendingWrites.isEmpty()) {
-                flushPendingWrites();
-            }
-        }
-
-        String k = key(personId, planId);
-        byte[] blob = planBlobs.get(k);
-        if (blob == null) throw new IllegalStateException("Plan blob missing for " + k);
-        return codec.deserialize(blob);
+        PlanData data = getPlanData(personId, planId);
+        if (data == null) throw new IllegalStateException("Plan data missing for " + key(personId, planId));
+        return codec.deserialize(data.blob);
     }
 
     @Override
     public boolean hasPlan(String personId, String planId) {
-        return planBlobs.containsKey(key(personId, planId));
+        synchronized (pendingWrites) {
+            for (PendingWrite pw : pendingWrites) {
+                if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
+                    return true;
+                }
+            }
+        }
+        return planDataMap.containsKey(key(personId, planId));
     }
 
     @Override
@@ -279,16 +338,10 @@ public final class MapDbPlanStore implements PlanStore {
     @Override
     public synchronized void deletePlan(String personId, String planId) {
         deletePlanInternal(personId, planId);
-        incrementUncommitted();
     }
 
     private void deletePlanInternal(String personId, String planId) {
-        String k = key(personId, planId);
-        planBlobs.remove(k);
-        planScores.remove(k);
-        planCreationIter.remove(k);
-        planLastUsedIter.remove(k);
-        planTypes.remove(k);
+        planDataMap.remove(key(personId, planId));
 
         planIdCache.computeIfPresent(personId, (key, list) -> {
             List<String> newList = new ArrayList<>(list);
@@ -297,7 +350,7 @@ public final class MapDbPlanStore implements PlanStore {
                 planIndexByPerson.remove(personId);
                 return null;
             }
-            planIndexByPerson.put(personId, String.join(",", newList));
+            planIndexByPerson.put(personId, joinPlanIds(newList));
             return newList;
         });
 
@@ -312,7 +365,6 @@ public final class MapDbPlanStore implements PlanStore {
         synchronized (pendingWrites) {
             flushPendingWrites();
         }
-        uncommittedWrites = 0;
         enforceAllPlanLimits();
     }
 
