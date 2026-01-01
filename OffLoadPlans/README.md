@@ -155,7 +155,17 @@ mvn test
 Key test classes:
 - `PlanProxyTest` - Tests proxy lifecycle and lazy loading
 - `OffloadModuleIT` - Integration test with full MATSim simulation
+- `OffloadModuleExampleTest` - Validates that at most 1 plan is materialized per person at runtime
 - `FuryRoundtripTest` - Serialization round-trip tests
+
+### Materialization Constraint Validation
+
+The `OffloadModuleExampleTest` includes comprehensive validation that ensures:
+- **At iteration start**: At most 1 plan is materialized per person (the selected plan)
+- **At iteration end**: 0 plans are materialized (all are dematerialized)
+- **During simulation**: Memory footprint is minimal while maintaining full selector functionality
+
+This validates the core promise of the PlanProxy architecture: keeping all plan scores in memory for proper selection while materializing at most 1 plan per person at any given time.
 
 ## Technical Details
 
