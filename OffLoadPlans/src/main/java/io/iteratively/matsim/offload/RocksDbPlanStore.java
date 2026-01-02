@@ -450,9 +450,7 @@ public final class RocksDbPlanStore implements PlanStore {
 
     @Override
     public void commit() {
-        synchronized (pendingWrites) {
-            flushPendingWrites();
-        }
+        flushPendingWrites();
         enforceAllPlanLimits();
         
         try {
