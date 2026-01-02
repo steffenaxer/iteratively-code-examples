@@ -9,6 +9,7 @@ import org.rocksdb.*;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
 public final class RocksDbPlanStore implements PlanStore {
@@ -28,6 +29,8 @@ public final class RocksDbPlanStore implements PlanStore {
 
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
     private static final int WRITE_BUFFER_SIZE = 100_000;
+    
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     private static final byte[] PLAN_DATA_PREFIX = "pd:".getBytes();
     private static final byte[] ACTIVE_PLAN_PREFIX = "ap:".getBytes();
@@ -191,7 +194,8 @@ public final class RocksDbPlanStore implements PlanStore {
     private PlanData getPlanData(String personId, String planId) {
         String k = key(personId, planId);
         
-        synchronized (pendingWrites) {
+        lock.readLock().lock();
+        try {
             for (int i = pendingWrites.size() - 1; i >= 0; i--) {
                 PendingWrite pw = pendingWrites.get(i);
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
@@ -199,13 +203,15 @@ public final class RocksDbPlanStore implements PlanStore {
                     return new PlanData(pw.blob, pw.score, creationIter, pw.iter, pw.type);
                 }
             }
-        }
-        
-        try {
-            byte[] raw = db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, k));
-            return raw != null ? PlanData.deserialize(raw) : null;
-        } catch (RocksDBException e) {
-            throw new RuntimeException("Failed to get plan data", e);
+            
+            try {
+                byte[] raw = db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, k));
+                return raw != null ? PlanData.deserialize(raw) : null;
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to get plan data", e);
+            }
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -226,13 +232,16 @@ public final class RocksDbPlanStore implements PlanStore {
         creationIterCache.putIfAbsent(k, iter);
         
         boolean shouldFlush;
-        synchronized (pendingWrites) {
-            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType));
+        lock.readLock().lock();
+        try {
+            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType, k));
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
                 activePlanCache.put(personId, planId);
             }
             shouldFlush = pendingWrites.size() >= WRITE_BUFFER_SIZE;
+        } finally {
+            lock.readLock().unlock();
         }
         
         if (shouldFlush) {
@@ -254,10 +263,14 @@ public final class RocksDbPlanStore implements PlanStore {
 
     private void flushPendingWrites() {
         List<PendingWrite> toFlush;
-        synchronized (pendingWrites) {
+        
+        lock.writeLock().lock();
+        try {
             if (pendingWrites.isEmpty()) return;
             toFlush = new ArrayList<>(pendingWrites);
             pendingWrites.clear();
+        } finally {
+            lock.writeLock().unlock();
         }
 
         log.info("Flushing {} pending writes to RocksDB...", toFlush.size());
