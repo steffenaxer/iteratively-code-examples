@@ -466,8 +466,24 @@ public final class RocksDbPlanStore implements PlanStore {
     public void close() {
         commit();
         
+        try {
+            if (db != null) {
+                db.syncWal();
+                db.cancelAllBackgroundWork(true);
+            }
+        } catch (RocksDBException e) {
+            log.warn("Error during background work cancellation", e);
+        }
+        
         if (readOptions != null) readOptions.close();
         if (writeOptions != null) writeOptions.close();
         if (db != null) db.close();
+        
+        System.gc();
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

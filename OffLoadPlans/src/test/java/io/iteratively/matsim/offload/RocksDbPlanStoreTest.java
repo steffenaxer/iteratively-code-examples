@@ -37,6 +37,13 @@ public class RocksDbPlanStoreTest {
     public void tearDown() {
         if (store != null) {
             store.close();
+            store = null;
+        }
+        System.gc();
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
     

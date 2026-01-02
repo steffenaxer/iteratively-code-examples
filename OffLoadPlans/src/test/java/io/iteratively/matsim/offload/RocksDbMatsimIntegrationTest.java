@@ -218,40 +218,44 @@ public class RocksDbMatsimIntegrationTest {
         
         RocksDbPlanStore store = new RocksDbPlanStore(dbDir, scenario, 3);
         
-        Population population = scenario.getPopulation();
-        PopulationFactory pf = population.getFactory();
-        
-        // Only test 3 persons
-        for (int i = 0; i < 3; i++) {
-            Person person = population.getPersons().get(Id.createPersonId("person_" + i));
-            if (person != null) {
-                Plan originalPlan = person.getSelectedPlan();
-                String planId = "plan_iter_0_" + i;
-                
-                store.putPlan(person.getId().toString(), planId, originalPlan, 
-                    100.0 + i, 0, true);
-                
-                if (i % 2 == 0) {
-                    store.commit();
+        try {
+            Population population = scenario.getPopulation();
+            PopulationFactory pf = population.getFactory();
+            
+            // Only test 3 persons
+            for (int i = 0; i < 3; i++) {
+                Person person = population.getPersons().get(Id.createPersonId("person_" + i));
+                if (person != null) {
+                    Plan originalPlan = person.getSelectedPlan();
+                    String planId = "plan_iter_0_" + i;
+                    
+                    store.putPlan(person.getId().toString(), planId, originalPlan, 
+                        100.0 + i, 0, true);
+                    
+                    if (i % 2 == 0) {
+                        store.commit();
+                    }
                 }
             }
-        }
-        
-        store.commit();
-        
-        for (int i = 0; i < 3; i++) {
-            Person person = population.getPersons().get(Id.createPersonId("person_" + i));
-            if (person != null) {
-                String planId = "plan_iter_0_" + i;
-                Plan materialized = store.materialize(person.getId().toString(), planId);
-                
-                assertNotNull(materialized, 
-                    "Plan for person_" + i + " should be retrievable");
-                assertEquals(5, materialized.getPlanElements().size(),
-                    "Materialized plan should have correct number of elements");
+            
+            store.commit();
+            
+            for (int i = 0; i < 3; i++) {
+                Person person = population.getPersons().get(Id.createPersonId("person_" + i));
+                if (person != null) {
+                    String planId = "plan_iter_0_" + i;
+                    Plan materialized = store.materialize(person.getId().toString(), planId);
+                    
+                    assertNotNull(materialized, 
+                        "Plan for person_" + i + " should be retrievable");
+                    assertEquals(5, materialized.getPlanElements().size(),
+                        "Materialized plan should have correct number of elements");
+                }
             }
+        } finally {
+            store.close();
+            System.gc();
+            Thread.sleep(200);
         }
-        
-        store.close();
     }
 }
