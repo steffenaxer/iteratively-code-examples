@@ -45,12 +45,19 @@ public class OffloadModuleIT {
         controler.addOverridingModule(new OffloadModule());
         controler.run();
 
+        System.gc();
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
         File rocksDbDir = new File(storeDir, "rocksdb");
 
         assertTrue(rocksDbDir.exists(), "RocksDB directory should exist");
         assertTrue(rocksDbDir.isDirectory(), "RocksDB store should be a directory");
 
-        try (RocksDbPlanStore store = new RocksDbPlanStore(storeDir, scenario,
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario,
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             int storedPlans = 0;
             for (Person person : scenario.getPopulation().getPersons().values()) {
