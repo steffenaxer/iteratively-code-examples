@@ -115,7 +115,6 @@ The latest version includes several critical optimizations focused on **write pe
    - Flush operation moved outside synchronized block
    - Cache updates use `putIfAbsent` instead of `containsKey + put`
    - Minimized time in critical sections
-   - Better multi-threaded performance
 
 6. **Enhanced MapDB Configuration**
    - Transaction support for consistent batch commits

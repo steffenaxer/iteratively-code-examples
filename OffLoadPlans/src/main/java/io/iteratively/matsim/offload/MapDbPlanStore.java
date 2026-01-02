@@ -36,10 +36,6 @@ import java.util.regex.Pattern;
  *    - Transaktionen aktiviert für konsistente Batch-Commits
  *    - Moderate Startallokation (256 MB) und Inkrement (128 MB)
  *    - Memory-mapped I/O für schnelleren Zugriff
- * 
- * 5. THREAD-POOL FÜR ZUKÜNFTIGE PARALLELISIERUNG
- *    - Vorbereitet für parallele Serialisierung falls nötig
- *    - CPU-Kern-basierte Pool-Größe
  */
 public final class MapDbPlanStore implements PlanStore {
     private static final Logger log = LogManager.getLogger(MapDbPlanStore.class);
@@ -61,10 +57,6 @@ public final class MapDbPlanStore implements PlanStore {
 
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
     private static final int WRITE_BUFFER_SIZE = 100_000;  // Noch größerer Buffer für weniger Flush-Operationen
-    
-    // Thread-Pool für parallele Serialisierung
-    private final ExecutorService serializationExecutor;
-    private final int parallelSerializationThreads;
 
     // Konsolidiertes Datenformat für alle Plan-Metadaten
     private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type) implements Serializable {
@@ -122,17 +114,6 @@ public final class MapDbPlanStore implements PlanStore {
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
         this.creationIterCache = new ConcurrentHashMap<>();
-        
-        // Thread-Pool für parallele Serialisierung (CPU-Kerne - 1, mindestens 2)
-        this.parallelSerializationThreads = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
-        this.serializationExecutor = Executors.newFixedThreadPool(
-            parallelSerializationThreads,
-            r -> {
-                Thread t = new Thread(r, "PlanSerializer");
-                t.setDaemon(true);
-                return t;
-            }
-        );
 
         this.db = DBMaker
                 .fileDB(file)
@@ -450,18 +431,6 @@ public final class MapDbPlanStore implements PlanStore {
     @Override
     public void close() {
         commit();
-        
-        // Executor ordentlich beenden
-        serializationExecutor.shutdown();
-        try {
-            if (!serializationExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
-                serializationExecutor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            serializationExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-        
         db.close();
     }
 }

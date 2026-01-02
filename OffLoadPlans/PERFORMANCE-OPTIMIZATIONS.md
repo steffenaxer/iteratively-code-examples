@@ -247,7 +247,7 @@ Bei langsamen Flush-Operationen (>10 Sekunden für 100k Pläne):
 
 Potenzielle weitere Verbesserungen:
 
-1. **Parallele Serialisierung**: Thread-Pool ist vorbereitet, noch nicht aktiv genutzt
+1. **Parallele Serialisierung**: Multi-threaded Serialisierung für große Batches
 2. **Komprimierung vor Serialisierung**: Fury-spezifische Optimierungen
 3. **Async Flush**: Non-blocking Flush-Operationen
 4. **Adaptive Buffer-Größe**: Basierend auf Memory-Pressure
