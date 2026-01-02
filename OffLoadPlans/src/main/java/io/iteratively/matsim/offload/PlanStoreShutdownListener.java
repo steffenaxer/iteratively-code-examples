@@ -30,6 +30,8 @@ public class PlanStoreShutdownListener implements ShutdownListener {
     }
 
     private void dumpPlanStore(ShutdownEvent event) {
+        planStore.commit();
+        
         var config = event.getServices().getConfig();
         String outputDir = config.controller().getOutputDirectory();
         var compressionType = config.controller().getCompressionType();
