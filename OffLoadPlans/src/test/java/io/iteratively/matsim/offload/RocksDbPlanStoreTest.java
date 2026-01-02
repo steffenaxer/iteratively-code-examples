@@ -3,24 +3,24 @@ package io.iteratively.matsim.offload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.*;
 import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.scenario.ScenarioUtils;
+import org.matsim.testcases.MatsimTestUtils;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class RocksDbPlanStoreTest {
     
-    @TempDir
-    Path tempDir;
+    @RegisterExtension
+    private MatsimTestUtils utils = new MatsimTestUtils();
     
     private Scenario scenario;
     private RocksDbPlanStore store;
@@ -28,7 +28,7 @@ public class RocksDbPlanStoreTest {
     @BeforeEach
     public void setUp() {
         scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
-        File dbDir = tempDir.resolve("rocksdb").toFile();
+        File dbDir = new File(utils.getOutputDirectory(), "rocksdb");
         dbDir.mkdirs();
         store = new RocksDbPlanStore(dbDir, scenario, 5);
     }

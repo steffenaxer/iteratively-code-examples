@@ -3,7 +3,7 @@ package io.iteratively.matsim.offload;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.Scenario;
@@ -21,9 +21,9 @@ import org.matsim.core.controler.OutputDirectoryHierarchy;
 import org.matsim.core.population.io.PopulationReader;
 import org.matsim.core.population.io.PopulationWriter;
 import org.matsim.core.scenario.ScenarioUtils;
+import org.matsim.testcases.MatsimTestUtils;
 
 import java.io.File;
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class RocksDbMatsimIntegrationTest {
     
-    @TempDir
-    Path tempDir;
+    @RegisterExtension
+    private MatsimTestUtils utils = new MatsimTestUtils();
     
     private Config config;
     private Scenario scenario;
@@ -46,7 +46,7 @@ public class RocksDbMatsimIntegrationTest {
         // Minimal iterations for fast test
         config.controller().setFirstIteration(0);
         config.controller().setLastIteration(1);  // Only 2 iterations
-        config.controller().setOutputDirectory(tempDir.resolve("output").toString());
+        config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setWriteEventsInterval(0);
         config.controller().setWritePlansInterval(1);
@@ -145,7 +145,7 @@ public class RocksDbMatsimIntegrationTest {
     public void testRocksDbWithMatsimSimulation() {
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
-        offloadConfig.setStoreDirectory(tempDir.resolve("rocksdb-store").toString());
+        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "rocksdb-store").toString());
         offloadConfig.setCacheEntries(5);
         config.addModule(offloadConfig);
         
@@ -185,7 +185,7 @@ public class RocksDbMatsimIntegrationTest {
     public void testMapDbWithMatsimSimulation() {
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.MAPDB);
-        offloadConfig.setStoreDirectory(tempDir.resolve("mapdb-store").toString());
+        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "mapdb-store").toString());
         offloadConfig.setCacheEntries(5);
         config.addModule(offloadConfig);
         
@@ -209,7 +209,7 @@ public class RocksDbMatsimIntegrationTest {
     public void testPopulationWritingWithOffloadedPlans() throws Exception {
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
-        offloadConfig.setStoreDirectory(tempDir.resolve("rocksdb-write-test").toString());
+        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "rocksdb-write-test").toString());
         offloadConfig.setCacheEntries(3);
         config.addModule(offloadConfig);
         
