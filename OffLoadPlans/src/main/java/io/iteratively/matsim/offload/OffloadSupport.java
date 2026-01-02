@@ -10,35 +10,40 @@ public final class OffloadSupport {
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
 
-    /**
-     * Loads all plans for a person as lightweight proxies.
-     * This keeps all plan scores in memory for proper plan selection.
-     * If no plans exist in the store, keeps the existing plans.
-     */
+    private static boolean isValidScore(Double score) {
+        return score != null && !score.isNaN() && !score.isInfinite();
+    }
+
+    private static double toStorableScore(Double score) {
+        return isValidScore(score) ? score : Double.NEGATIVE_INFINITY;
+    }
+
     public static void loadAllPlansAsProxies(Person p, PlanStore store) {
         String personId = p.getId().toString();
         List<PlanHeader> headers = store.listPlanHeaders(personId);
 
-        // Wichtig: Wenn keine Pläne im Store, behalte existierende Pläne
         if (headers.isEmpty()) {
             return;
         }
 
         p.getPlans().clear();
 
+        Plan selectedPlan = null;
         for (PlanHeader h : headers) {
             PlanProxy proxy = new PlanProxy(h, p, store);
             p.addPlan(proxy);
             if (h.selected) {
-                p.setSelectedPlan(proxy);
+                selectedPlan = proxy;
             }
+        }
+
+        if (selectedPlan != null) {
+            p.setSelectedPlan(selectedPlan);
+        } else if (!p.getPlans().isEmpty()) {
+            p.setSelectedPlan(p.getPlans().get(0));
         }
     }
 
-    /**
-     * Persists all materialized plans back to the store.
-     * Only saves plans that were actually materialized and modified.
-     */
     public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
         String personId = p.getId().toString();
 
@@ -48,7 +53,7 @@ public final class OffloadSupport {
                     Plan materialized = proxy.getMaterializedPlan();
                     if (shouldPersist(materialized)) {
                         String planId = proxy.getPlanId();
-                        double score = proxy.getScore() != null ? proxy.getScore() : Double.NEGATIVE_INFINITY;
+                        double score = toStorableScore(proxy.getScore());
                         boolean isSelected = (plan == p.getSelectedPlan());
                         store.putPlan(personId, planId, materialized, score, iter, isSelected);
                         markPersisted(materialized);
@@ -56,10 +61,9 @@ public final class OffloadSupport {
                     proxy.dematerialize();
                 }
             } else {
-                // Regulärer Plan (nicht Proxy) - auch persistieren
                 if (shouldPersist(plan)) {
                     String planId = ensurePlanId(plan);
-                    double score = plan.getScore() != null ? plan.getScore() : Double.NEGATIVE_INFINITY;
+                    double score = toStorableScore(plan.getScore());
                     boolean isSelected = (plan == p.getSelectedPlan());
                     store.putPlan(personId, planId, plan, score, iter, isSelected);
                     markPersisted(plan);
@@ -68,18 +72,15 @@ public final class OffloadSupport {
         }
     }
 
-    /**
-     * Adds a new plan as a proxy to the person.
-     */
     public static void addNewPlan(Person p, Plan plan, PlanStore store, int iter) {
         String personId = p.getId().toString();
         String planId = ensurePlanId(plan);
-        double score = plan.getScore() != null ? plan.getScore() : Double.NEGATIVE_INFINITY;
+        double score = toStorableScore(plan.getScore());
 
         store.putPlan(personId, planId, plan, score, iter, false);
         markPersisted(plan);
 
-        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, score);
+        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, plan.getScore());
         p.addPlan(proxy);
     }
 
@@ -123,7 +124,7 @@ public final class OffloadSupport {
 
         String personId = p.getId().toString();
         String planId = ensurePlanId(sel);
-        double score = sel.getScore() == null ? Double.NEGATIVE_INFINITY : sel.getScore();
+        double score = toStorableScore(sel.getScore());
         byte[] blob = codec.serialize(sel);
 
         markPersisted(sel);
@@ -136,7 +137,7 @@ public final class OffloadSupport {
 
         String personId = p.getId().toString();
         String planId = ensurePlanId(sel);
-        double score = sel.getScore() == null ? Double.NEGATIVE_INFINITY : sel.getScore();
+        double score = toStorableScore(sel.getScore());
 
         if (shouldPersist(sel)) {
             store.putPlan(personId, planId, sel, score, iter, true);
@@ -156,7 +157,10 @@ public final class OffloadSupport {
 
     private static int computePlanHash(Plan plan) {
         int hash = plan.getPlanElements().size();
-        hash = 31 * hash + (plan.getScore() != null ? plan.getScore().hashCode() : 0);
+        Double score = plan.getScore();
+        if (isValidScore(score)) {
+            hash = 31 * hash + score.hashCode();
+        }
         for (var element : plan.getPlanElements()) {
             hash = 31 * hash + element.hashCode();
         }

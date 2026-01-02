@@ -31,7 +31,8 @@ public final class PlanProxy implements Plan {
         this.store = store;
         this.type = header.type;
         this.creationIter = header.creationIter;
-        this.score = header.score;
+        // NaN als null behandeln
+        this.score = isValidScore(header.score) ? header.score : null;
     }
 
     public PlanProxy(String planId, Person person, PlanStore store, String type,
@@ -41,7 +42,12 @@ public final class PlanProxy implements Plan {
         this.store = store;
         this.type = type;
         this.creationIter = creationIter;
-        this.score = score;
+        // NaN als null behandeln
+        this.score = isValidScore(score) ? score : null;
+    }
+
+    private static boolean isValidScore(Double score) {
+        return score != null && !score.isNaN() && !score.isInfinite();
     }
 
     public String getPlanId() {
@@ -63,18 +69,33 @@ public final class PlanProxy implements Plan {
     @Override
     public Double getScore() {
         if (materializedPlan != null) {
-            return materializedPlan.getScore();
+            Double matScore = materializedPlan.getScore();
+            // NaN normalisieren
+            if (matScore != null && (matScore.isNaN() || matScore.isInfinite())) {
+                return null;
+            }
+            return matScore;
         }
         return score;
     }
 
     @Override
     public void setScore(Double score) {
-        this.score = score != null ? score : Double.NaN;
+        // NaN und Infinite als null behandeln
+        if (score != null && (score.isNaN() || score.isInfinite())) {
+            this.score = null;
+        } else {
+            this.score = score;
+        }
+
         if (materializedPlan != null) {
             materializedPlan.setScore(this.score);
         }
-        store.updateScore(person.getId().toString(), planId, this.score, creationIter);
+
+        // Nur gültige Scores zum Store schreiben
+        if (this.score != null) {
+            store.updateScore(person.getId().toString(), planId, this.score, creationIter);
+        }
     }
 
     // --- Type: works without materialization ---
@@ -200,7 +221,9 @@ public final class PlanProxy implements Plan {
 
     public void dematerialize() {
         if (materializedPlan != null) {
-            this.score = materializedPlan.getScore();
+            Double matScore = materializedPlan.getScore();
+            // NaN normalisieren beim Dematerialisieren
+            this.score = isValidScore(matScore) ? matScore : null;
             this.type = materializedPlan.getType();
             this.materializedPlan = null;
         }
