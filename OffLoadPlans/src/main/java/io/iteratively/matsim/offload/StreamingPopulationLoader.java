@@ -88,8 +88,8 @@ public class StreamingPopulationLoader {
             
             // Store all plans in the plan store
             for (Plan plan : person.getPlans()) {
-                String planId = ensurePlanId(plan);
-                double score = toStorableScore(plan.getScore());
+                String planId = OffloadSupport.ensurePlanId(plan);
+                double score = OffloadSupport.toStorableScore(plan.getScore());
                 boolean isSelected = (plan == selectedPlan);
                 
                 planStore.putPlan(personId, planId, plan, score, initialIteration, isSelected);
@@ -105,24 +105,5 @@ public class StreamingPopulationLoader {
             
             targetScenario.getPopulation().addPerson(scenarioPerson);
         }
-    }
-    
-    private static double toStorableScore(Double score) {
-        if (score == null || score.isNaN() || score.isInfinite()) {
-            return Double.NEGATIVE_INFINITY;
-        }
-        return score;
-    }
-    
-    /**
-     * Helper method to ensure plan has an ID.
-     * Package-private for access by the algorithm.
-     */
-    private static String ensurePlanId(Plan plan) {
-        Object attr = plan.getAttributes().getAttribute("offloadPlanId");
-        if (attr instanceof String s) return s;
-        String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());
-        plan.getAttributes().putAttribute("offloadPlanId", pid);
-        return pid;
     }
 }

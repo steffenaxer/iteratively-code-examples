@@ -10,11 +10,11 @@ public final class OffloadSupport {
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
 
-    private static boolean isValidScore(Double score) {
+    public static boolean isValidScore(Double score) {
         return score != null && !score.isNaN() && !score.isInfinite();
     }
 
-    private static double toStorableScore(Double score) {
+    public static double toStorableScore(Double score) {
         return isValidScore(score) ? score : Double.NEGATIVE_INFINITY;
     }
 
@@ -167,7 +167,14 @@ public final class OffloadSupport {
         return hash;
     }
 
-    private static String ensurePlanId(Plan plan) {
+    /**
+     * Ensures that a plan has a unique ID. If the plan already has an ID attribute,
+     * it returns that ID. Otherwise, it generates a new unique ID and stores it.
+     * 
+     * @param plan the plan to ensure has an ID
+     * @return the plan's ID
+     */
+    public static String ensurePlanId(Plan plan) {
         Object attr = plan.getAttributes().getAttribute("offloadPlanId");
         if (attr instanceof String s) return s;
         String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());
