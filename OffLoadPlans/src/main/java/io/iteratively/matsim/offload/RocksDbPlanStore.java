@@ -189,17 +189,20 @@ public final class RocksDbPlanStore implements PlanStore {
     }
 
     private PlanData getPlanData(String personId, String planId) {
+        String k = key(personId, planId);
+        
         synchronized (pendingWrites) {
             for (int i = pendingWrites.size() - 1; i >= 0; i--) {
                 PendingWrite pw = pendingWrites.get(i);
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
-                    return new PlanData(pw.blob, pw.score, pw.iter, pw.iter, pw.type);
+                    int creationIter = creationIterCache.getOrDefault(k, pw.iter);
+                    return new PlanData(pw.blob, pw.score, creationIter, pw.iter, pw.type);
                 }
             }
         }
         
         try {
-            byte[] raw = db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, key(personId, planId)));
+            byte[] raw = db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, k));
             return raw != null ? PlanData.deserialize(raw) : null;
         } catch (RocksDBException e) {
             throw new RuntimeException("Failed to get plan data", e);
