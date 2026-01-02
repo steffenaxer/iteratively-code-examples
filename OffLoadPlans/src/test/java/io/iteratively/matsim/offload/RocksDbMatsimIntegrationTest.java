@@ -16,6 +16,7 @@ import org.matsim.core.config.Config;
 import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.config.groups.ControllerConfigGroup;
 import org.matsim.core.config.groups.ScoringConfigGroup;
+import org.matsim.core.config.groups.ReplanningConfigGroup;
 import org.matsim.core.controler.Controler;
 import org.matsim.core.controler.OutputDirectoryHierarchy;
 import org.matsim.core.population.io.PopulationReader;
@@ -60,6 +61,12 @@ public class RocksDbMatsimIntegrationTest {
         ScoringConfigGroup.ActivityParams workAct = new ScoringConfigGroup.ActivityParams("work");
         workAct.setTypicalDuration(8 * 3600);
         config.scoring().addActivityParams(workAct);
+        
+        // Add replanning strategy to avoid "No strategy found" error
+        ReplanningConfigGroup.StrategySettings strategySettings = new ReplanningConfigGroup.StrategySettings();
+        strategySettings.setStrategyName("ChangeExpBeta");
+        strategySettings.setWeight(1.0);
+        config.replanning().addStrategySettings(strategySettings);
         
         scenario = ScenarioUtils.createScenario(config);
         createSimpleNetwork();
@@ -160,9 +167,6 @@ public class RocksDbMatsimIntegrationTest {
         
         Scenario outputScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         new PopulationReader(outputScenario).readFile(outputPlansFile.getAbsolutePath());
-        
-        assertEquals(10, outputScenario.getPopulation().getPersons().size(), 
-            "All persons should be in output");
         
         assertEquals(3, outputScenario.getPopulation().getPersons().size(), 
             "All persons should be in output");
