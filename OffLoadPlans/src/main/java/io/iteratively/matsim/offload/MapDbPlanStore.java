@@ -63,9 +63,11 @@ public final class MapDbPlanStore implements PlanStore {
         // Optimierte Serialisierung: direkt in vorbereiteten Buffer schreiben
         static byte[] serializeDirect(byte[] blob, double score, int creationIter, int lastUsedIter, String type) {
             try {
-                // Berechne exakte Größe im Voraus
-                int size = 4 + blob.length + 8 + 4 + 4 + 1 + (type != null ? 2 + type.getBytes("UTF-8").length : 0);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream(size);
+                // Approximative Größenberechnung (writeUTF hat 2-byte length prefix + UTF bytes)
+                // Etwas größer als nötig ist OK, vermeidet Reallokation
+                int estimatedSize = 4 + blob.length + 8 + 4 + 4 + 1 + 
+                                   (type != null ? 4 + type.length() * 3 : 0);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(estimatedSize);
                 DataOutputStream dos = new DataOutputStream(baos);
                 
                 dos.writeInt(blob.length);
@@ -75,6 +77,7 @@ public final class MapDbPlanStore implements PlanStore {
                 dos.writeInt(lastUsedIter);
                 dos.writeBoolean(type != null);
                 if (type != null) dos.writeUTF(type);
+                dos.flush();  // Explizit flushen
                 return baos.toByteArray();
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
