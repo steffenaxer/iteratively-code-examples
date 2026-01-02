@@ -85,14 +85,53 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ## Performance Optimizations
 
+### Write Performance Optimizations (Latest)
+
+The latest version includes several critical optimizations focused on **write performance**:
+
+1. **Elimination of DB Lookups During Flush (BIGGEST IMPROVEMENT)**
+   - Added `creationIterCache` to track creation iterations in memory
+   - **Before**: `planDataMap.get()` called for every plan during flush → thousands of slow DB accesses
+   - **After**: Direct cache lookup → zero DB accesses during flush
+   - **Impact**: Drastically reduces flush time, especially for large batches
+
+2. **Increased Write Buffer**
+   - Buffer size: 50,000 → 100,000 entries
+   - Fewer flush operations = better amortization of flush overhead
+   - Larger batches for MapDB's bulk write operations
+
+3. **Optimized Data Serialization**
+   - New `serializeDirect()` method with pre-allocated buffers
+   - Exact size calculation eliminates buffer resizing
+   - Avoids creating temporary `PlanData` objects during flush
+   - Reduced memory allocations and GC pressure
+
+4. **Pre-Computed Keys**
+   - Keys computed once in `PendingWrite` record
+   - Eliminates repeated string concatenation during flush
+   - Reduces CPU overhead and string allocations
+
+5. **Reduced Lock Contention**
+   - Flush operation moved outside synchronized block
+   - Cache updates use `putIfAbsent` instead of `containsKey + put`
+   - Minimized time in critical sections
+   - Better multi-threaded performance
+
+6. **Enhanced MapDB Configuration**
+   - Transaction support for consistent batch commits
+   - Moderate initial allocation: 256 MB (reasonable for most use cases)
+   - Moderate increment: 128 MB
+   - Reduces file fragmentation while avoiding excessive memory usage
+
 ### MapDB Layer
 
 - **Consolidated PlanData**: Single map instead of 7 separate maps
 - **Bulk writes**: Uses `putAll()` for batch operations
-- **Write buffering**: 50,000 entry buffer before flush
+- **Write buffering**: 100,000 entry buffer before flush (increased from 50,000)
 - **Compression**: `SerializerCompressionWrapper` for plan data
 - **Async writes**: `executorEnable()` for non-blocking persistence
 - **Memory-mapped files**: Fast file I/O
+- **Transaction commits**: Batch commits for consistency
 
 ### Proxy Layer
 

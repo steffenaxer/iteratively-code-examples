@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  * 
  * 4. MAPDB-KONFIGURATION
  *    - Transaktionen aktiviert für konsistente Batch-Commits
- *    - Größerer Startallokation (1 GB) und Inkrement (512 MB)
+ *    - Moderate Startallokation (256 MB) und Inkrement (128 MB)
  *    - Memory-mapped I/O für schnelleren Zugriff
  * 
  * 5. THREAD-POOL FÜR ZUKÜNFTIGE PARALLELISIERUNG
@@ -137,8 +137,8 @@ public final class MapDbPlanStore implements PlanStore {
         this.db = DBMaker
                 .fileDB(file)
                 .fileMmapEnableIfSupported()
-                .allocateStartSize(1024 * 1024 * 1024)  // 1 GB Startgröße
-                .allocateIncrement(512 * 1024 * 1024)   // 512 MB Inkrement
+                .allocateStartSize(256 * 1024 * 1024)  // 256 MB Startgröße (vernünftiger als 1 GB)
+                .allocateIncrement(128 * 1024 * 1024)  // 128 MB Inkrement
                 .fileMmapPreclearDisable()
                 .transactionEnable()  // Transaktionen für batch commits
                 .executorEnable()  // Async writes
