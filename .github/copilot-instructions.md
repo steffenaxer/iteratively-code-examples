@@ -11,10 +11,10 @@ This repository contains code examples that accompany blog posts published on [i
 ## Technology Stack
 
 ### Java
-- **Language Version**: Java 22 (properties specify 21, but compiler plugin uses 22)
+- **Language Version**: Java 25
 - **Build Tool**: Maven
 - **Main Framework**: MATSim (Multi-Agent Transport Simulation)
-  - Version: 2026.0-PR4219
+  - Version: 2026.0-2025w50
   - MATSim contrib modules: OSM, DVRP, DRT, DRT-extensions
 - **Key Dependencies**:
   - Apache Commons CLI for command-line argument parsing
@@ -30,7 +30,7 @@ This repository contains code examples that accompany blog posts published on [i
 
 ### Java
 - **Build**: `mvn clean install`
-- **Compiler**: Configured for Java 22 (source and target)
+- **Compiler**: Configured for Java 25 (source and target)
 - **Maven Repository**: Uses custom MATSim repository at `https://repo.matsim.org/repository/matsim`
 
 ### Python
