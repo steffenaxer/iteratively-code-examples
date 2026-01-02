@@ -383,18 +383,21 @@ public final class RocksDbPlanStore implements PlanStore {
 
     @Override
     public boolean hasPlan(String personId, String planId) {
-        synchronized (pendingWrites) {
+        lock.readLock().lock();
+        try {
             for (PendingWrite pw : pendingWrites) {
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
                     return true;
                 }
             }
-        }
-        
-        try {
-            return db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, key(personId, planId))) != null;
-        } catch (RocksDBException e) {
-            throw new RuntimeException("Failed to check plan existence", e);
+            
+            try {
+                return db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, key(personId, planId))) != null;
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to check plan existence", e);
+            }
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -404,8 +407,13 @@ public final class RocksDbPlanStore implements PlanStore {
     }
 
     @Override
-    public synchronized void deletePlan(String personId, String planId) {
-        deletePlanInternal(personId, planId);
+    public void deletePlan(String personId, String planId) {
+        lock.writeLock().lock();
+        try {
+            deletePlanInternal(personId, planId);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     private void deletePlanInternal(String personId, String planId) {
