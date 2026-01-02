@@ -7,18 +7,16 @@
     <groupId>io.iteratively</groupId>
     <artifactId>iteratively-code-examples</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>OffLoadPlans</module>
+    </modules>
 
     <properties>
-        <maven.compiler.source>22</maven.compiler.source>
-        <maven.compiler.target>22</maven.compiler.target>
+        <matsim.version>2026.0-2025w50</matsim.version>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!-- Versions -->
-        <matsim.version>2026.0-PR4219</matsim.version>
-        <json.version>20250517</json.version>
-        <commons.cli.version>1.10.0</commons.cli.version>
-        <log4j.version>2.21.0</log4j.version>
-        <osmosis.version>0.49.2</osmosis.version>
     </properties>
 
     <repositories>
@@ -27,26 +25,20 @@
             <url>https://repo.matsim.org/repository/matsim</url>
         </repository>
     </repositories>
-
     <build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>22</source>
-                    <target>22</target>
+                    <source>25</source>
+                    <target>25</target>
                 </configuration>
             </plugin>
         </plugins>
     </build>
 
     <dependencies>
-        <dependency>
-            <groupId>org.locationtech.jts</groupId>
-            <artifactId>jts-core</artifactId>
-            <version>1.20.0</version>
-        </dependency>
         <dependency>
             <groupId>org.matsim</groupId>
             <artifactId>matsim</artifactId>
@@ -69,58 +61,63 @@
         </dependency>
         <dependency>
             <groupId>org.matsim.contrib</groupId>
+            <artifactId>drt</artifactId>
+            <version>${matsim.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.matsim.contrib</groupId>
             <artifactId>drt-extensions</artifactId>
             <version>${matsim.version}</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>${json.version}</version>
+            <version>20250517</version>
         </dependency>
         <dependency>
             <groupId>commons-cli</groupId>
             <artifactId>commons-cli</artifactId>
-            <version>${commons.cli.version}</version>
+            <version>1.10.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>${log4j.version}</version>
+            <version>2.21.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>${log4j.version}</version>
+            <version>2.21.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>${log4j.version}</version>
+            <version>2.21.0</version>
         </dependency>
         <dependency>
             <groupId>org.openstreetmap.osmosis</groupId>
             <artifactId>osmosis-core</artifactId>
-            <version>${osmosis.version}</version>
+            <version>0.49.2</version>
         </dependency>
         <dependency>
             <groupId>org.openstreetmap.osmosis</groupId>
             <artifactId>osmosis-pbf</artifactId>
-            <version>${osmosis.version}</version>
+            <version>0.49.2</version>
         </dependency>
         <dependency>
             <groupId>org.openstreetmap.osmosis</groupId>
             <artifactId>osmosis-pbf2</artifactId>
-            <version>${osmosis.version}</version>
+            <version>0.49.2</version>
         </dependency>
         <dependency>
             <groupId>org.openstreetmap.osmosis</groupId>
             <artifactId>osmosis-xml</artifactId>
-            <version>${osmosis.version}</version>
+            <version>0.49.2</version>
         </dependency>
         <dependency>
             <groupId>org.openstreetmap.osmosis</groupId>
             <artifactId>osmosis-areafilter</artifactId>
-            <version>${osmosis.version}</version>
+            <version>0.49.2</version>
         </dependency>
     </dependencies>
 </project>
