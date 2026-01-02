@@ -44,14 +44,13 @@ public class RocksDbMatsimIntegrationTest {
     public void setUp() {
         config = ConfigUtils.createConfig();
         
-        // Minimal iterations for fast test
+        // More iterations to test plan creation during simulation
         config.controller().setFirstIteration(0);
-        config.controller().setLastIteration(1);  // Only 2 iterations
+        config.controller().setLastIteration(5);  // 6 iterations total
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setWriteEventsInterval(0);
-        config.controller().setWritePlansInterval(1);
-        config.controller().setWriteEventsInterval(0);
+        config.controller().setWritePlansInterval(5);
         config.controller().setCreateGraphs(false);
         
         ScoringConfigGroup.ActivityParams homeAct = new ScoringConfigGroup.ActivityParams("home");
@@ -62,11 +61,24 @@ public class RocksDbMatsimIntegrationTest {
         workAct.setTypicalDuration(8 * 3600);
         config.scoring().addActivityParams(workAct);
         
-        // Add replanning strategy to avoid "No strategy found" error
-        ReplanningConfigGroup.StrategySettings strategySettings = new ReplanningConfigGroup.StrategySettings();
-        strategySettings.setStrategyName("ChangeExpBeta");
-        strategySettings.setWeight(1.0);
-        config.replanning().addStrategySettings(strategySettings);
+        // Add replanning strategies to create new plans during simulation
+        ReplanningConfigGroup.StrategySettings strategySettings1 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings1.setStrategyName("ChangeExpBeta");
+        strategySettings1.setWeight(0.7);
+        config.replanning().addStrategySettings(strategySettings1);
+        
+        ReplanningConfigGroup.StrategySettings strategySettings2 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings2.setStrategyName("ReRoute");
+        strategySettings2.setWeight(0.2);
+        config.replanning().addStrategySettings(strategySettings2);
+        
+        ReplanningConfigGroup.StrategySettings strategySettings3 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings3.setStrategyName("TimeAllocationMutator");
+        strategySettings3.setWeight(0.1);
+        config.replanning().addStrategySettings(strategySettings3);
+        
+        // Set max plans to allow multiple plans per agent
+        config.replanning().setMaxAgentPlanMemorySize(5);
         
         scenario = ScenarioUtils.createScenario(config);
         createSimpleNetwork();
@@ -120,29 +132,36 @@ public class RocksDbMatsimIntegrationTest {
         Population population = scenario.getPopulation();
         PopulationFactory pf = population.getFactory();
         
-        // Only 3 agents for fast test
-        for (int i = 0; i < 3; i++) {
+        // 5 agents for more realistic test
+        for (int i = 0; i < 5; i++) {
             Person person = pf.createPerson(Id.createPersonId("person_" + i));
             
-            Plan plan = pf.createPlan();
-            
-            Activity homeAct1 = pf.createActivityFromLinkId("home", Id.createLinkId("1-2"));
-            homeAct1.setEndTime(7 * 3600 + i * 60);
-            plan.addActivity(homeAct1);
-            
-            plan.addLeg(pf.createLeg("car"));
-            
-            Activity workAct = pf.createActivityFromLinkId("work", Id.createLinkId("2-3"));
-            workAct.setEndTime(17 * 3600 + i * 60);
-            plan.addActivity(workAct);
-            
-            plan.addLeg(pf.createLeg("car"));
-            
-            Activity homeAct2 = pf.createActivityFromLinkId("home", Id.createLinkId("1-2"));
-            plan.addActivity(homeAct2);
-            
-            person.addPlan(plan);
-            person.setSelectedPlan(plan);
+            // Create 3 initial plans with different departure times per person
+            for (int planIdx = 0; planIdx < 3; planIdx++) {
+                Plan plan = pf.createPlan();
+                
+                Activity homeAct1 = pf.createActivityFromLinkId("home", Id.createLinkId("1-2"));
+                homeAct1.setEndTime(7 * 3600 + i * 60 + planIdx * 300);  // Vary by person and plan
+                plan.addActivity(homeAct1);
+                
+                plan.addLeg(pf.createLeg("car"));
+                
+                Activity workAct = pf.createActivityFromLinkId("work", Id.createLinkId("2-3"));
+                workAct.setEndTime(17 * 3600 + i * 60 + planIdx * 300);
+                plan.addActivity(workAct);
+                
+                plan.addLeg(pf.createLeg("car"));
+                
+                Activity homeAct2 = pf.createActivityFromLinkId("home", Id.createLinkId("1-2"));
+                plan.addActivity(homeAct2);
+                
+                person.addPlan(plan);
+                
+                // Set first plan as selected
+                if (planIdx == 0) {
+                    person.setSelectedPlan(plan);
+                }
+            }
             
             population.addPerson(person);
         }
@@ -174,13 +193,13 @@ public class RocksDbMatsimIntegrationTest {
         // Create fresh config and scenario for each run
         Config runConfig = ConfigUtils.createConfig();
         runConfig.controller().setFirstIteration(0);
-        runConfig.controller().setLastIteration(1);
+        runConfig.controller().setLastIteration(5);  // 6 iterations
         runConfig.controller().setOutputDirectory(
             new File(utils.getOutputDirectory(), subfolder).toString());
         runConfig.controller().setOverwriteFileSetting(
             OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         runConfig.controller().setWriteEventsInterval(0);
-        runConfig.controller().setWritePlansInterval(1);
+        runConfig.controller().setWritePlansInterval(5);
         runConfig.controller().setCreateGraphs(false);
         
         ScoringConfigGroup.ActivityParams homeAct = new ScoringConfigGroup.ActivityParams("home");
@@ -191,10 +210,24 @@ public class RocksDbMatsimIntegrationTest {
         workAct.setTypicalDuration(8 * 3600);
         runConfig.scoring().addActivityParams(workAct);
         
-        ReplanningConfigGroup.StrategySettings strategySettings = new ReplanningConfigGroup.StrategySettings();
-        strategySettings.setStrategyName("ChangeExpBeta");
-        strategySettings.setWeight(1.0);
-        runConfig.replanning().addStrategySettings(strategySettings);
+        // Add multiple replanning strategies to create new plans
+        ReplanningConfigGroup.StrategySettings strategySettings1 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings1.setStrategyName("ChangeExpBeta");
+        strategySettings1.setWeight(0.7);
+        runConfig.replanning().addStrategySettings(strategySettings1);
+        
+        ReplanningConfigGroup.StrategySettings strategySettings2 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings2.setStrategyName("ReRoute");
+        strategySettings2.setWeight(0.2);
+        runConfig.replanning().addStrategySettings(strategySettings2);
+        
+        ReplanningConfigGroup.StrategySettings strategySettings3 = new ReplanningConfigGroup.StrategySettings();
+        strategySettings3.setStrategyName("TimeAllocationMutator");
+        strategySettings3.setWeight(0.1);
+        runConfig.replanning().addStrategySettings(strategySettings3);
+        
+        // Set max plans to allow multiple plans per agent
+        runConfig.replanning().setMaxAgentPlanMemorySize(5);
         
         Scenario runScenario = ScenarioUtils.createScenario(runConfig);
         
@@ -215,10 +248,11 @@ public class RocksDbMatsimIntegrationTest {
             network.addLink(newLink);
         }
         
-        // Copy population
+        // Copy population with all initial plans
         Population population = runScenario.getPopulation();
         for (Person person : scenario.getPopulation().getPersons().values()) {
             Person newPerson = population.getFactory().createPerson(person.getId());
+            Plan selectedPlan = null;
             for (Plan plan : person.getPlans()) {
                 Plan newPlan = population.getFactory().createPlan();
                 for (PlanElement pe : plan.getPlanElements()) {
@@ -236,8 +270,12 @@ public class RocksDbMatsimIntegrationTest {
                     }
                 }
                 newPerson.addPlan(newPlan);
+                // Remember which plan was selected in the original
+                if (plan == person.getSelectedPlan()) {
+                    selectedPlan = newPlan;
+                }
             }
-            newPerson.setSelectedPlan(newPerson.getPlans().get(0));
+            newPerson.setSelectedPlan(selectedPlan != null ? selectedPlan : newPerson.getPlans().get(0));
             population.addPerson(newPerson);
         }
         
@@ -283,8 +321,13 @@ public class RocksDbMatsimIntegrationTest {
                 String.format("Person %s should exist in both %s and %s", personId, name1, name2));
             
             assertEquals(person1.getPlans().size(), person2.getPlans().size(),
-                String.format("Person %s should have same number of plans in %s and %s", 
-                    personId, name1, name2));
+                String.format("Person %s should have same number of plans in %s and %s (had %d vs %d)", 
+                    personId, name1, name2, person1.getPlans().size(), person2.getPlans().size()));
+            
+            // Verify each person has multiple plans (proving plan creation works)
+            assertTrue(person1.getPlans().size() > 1,
+                String.format("Person %s in %s should have multiple plans (has %d)", 
+                    personId, name1, person1.getPlans().size()));
             
             Plan selectedPlan1 = person1.getSelectedPlan();
             Plan selectedPlan2 = person2.getSelectedPlan();
@@ -304,6 +347,18 @@ public class RocksDbMatsimIntegrationTest {
                 assertEquals(selectedPlan1.getScore(), selectedPlan2.getScore(), 0.01,
                     String.format("Person %s should have same score in %s and %s", 
                         personId, name1, name2));
+            }
+            
+            // Compare all plans (scores should match for all plans)
+            for (int i = 0; i < person1.getPlans().size(); i++) {
+                Plan plan1 = person1.getPlans().get(i);
+                Plan plan2 = person2.getPlans().get(i);
+                
+                if (plan1.getScore() != null && plan2.getScore() != null) {
+                    assertEquals(plan1.getScore(), plan2.getScore(), 0.01,
+                        String.format("Person %s plan %d should have same score in %s and %s", 
+                            personId, i, name1, name2));
+                }
             }
         }
     }
