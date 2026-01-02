@@ -149,64 +149,163 @@ public class RocksDbMatsimIntegrationTest {
     }
     
     @Test
-    public void testRocksDbWithMatsimSimulation() {
-        OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
-        offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
-        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "rocksdb-store").toString());
-        offloadConfig.setCacheEntries(5);
-        config.addModule(offloadConfig);
+    public void testCompareAllStorageBackends() {
+        // Run simulation with RocksDB
+        Scenario rocksDbResult = runSimulationWithConfig("rocksdb", 
+            OffloadConfigGroup.StorageBackend.ROCKSDB, true);
         
-        Controler controler = new Controler(scenario);
-        controler.addOverridingModule(new OffloadModule());
+        // Run simulation with MapDB
+        Scenario mapDbResult = runSimulationWithConfig("mapdb", 
+            OffloadConfigGroup.StorageBackend.MAPDB, true);
         
-        controler.run();
+        // Run simulation without offload
+        Scenario noOffloadResult = runSimulationWithConfig("no-offload", 
+            null, false);
         
-        File outputPlansFile = new File(config.controller().getOutputDirectory(), 
-            "output_plans.xml.gz");
-        assertTrue(outputPlansFile.exists(), "Output plans file should exist");
-        
-        Scenario outputScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
-        new PopulationReader(outputScenario).readFile(outputPlansFile.getAbsolutePath());
-        
-        assertEquals(3, outputScenario.getPopulation().getPersons().size(), 
-            "All persons should be in output");
-        
-        for (Person person : outputScenario.getPopulation().getPersons().values()) {
-            assertFalse(person.getPlans().isEmpty(), 
-                "Person " + person.getId() + " should have at least one plan");
-            
-            Plan selectedPlan = person.getSelectedPlan();
-            assertNotNull(selectedPlan, 
-                "Person " + person.getId() + " should have a selected plan");
-            assertNotNull(selectedPlan.getPlanElements(), 
-                "Plan should have plan elements");
-            assertEquals(5, selectedPlan.getPlanElements().size(), 
-                "Plan should have 5 elements (3 activities, 2 legs)");
-        }
+        // Compare results - all should be identical
+        compareScenarioResults(rocksDbResult, mapDbResult, "RocksDB", "MapDB");
+        compareScenarioResults(rocksDbResult, noOffloadResult, "RocksDB", "No-Offload");
+        compareScenarioResults(mapDbResult, noOffloadResult, "MapDB", "No-Offload");
     }
     
-    @Test
-    public void testMapDbWithMatsimSimulation() {
-        OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
-        offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.MAPDB);
-        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "mapdb-store").toString());
-        offloadConfig.setCacheEntries(5);
-        config.addModule(offloadConfig);
+    private Scenario runSimulationWithConfig(String subfolder, 
+                                              OffloadConfigGroup.StorageBackend backend, 
+                                              boolean useOffload) {
+        // Create fresh config and scenario for each run
+        Config runConfig = ConfigUtils.createConfig();
+        runConfig.controller().setFirstIteration(0);
+        runConfig.controller().setLastIteration(1);
+        runConfig.controller().setOutputDirectory(
+            new File(utils.getOutputDirectory(), subfolder).toString());
+        runConfig.controller().setOverwriteFileSetting(
+            OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
+        runConfig.controller().setWriteEventsInterval(0);
+        runConfig.controller().setWritePlansInterval(1);
+        runConfig.controller().setCreateGraphs(false);
         
-        Controler controler = new Controler(scenario);
-        controler.addOverridingModule(new OffloadModule());
+        ScoringConfigGroup.ActivityParams homeAct = new ScoringConfigGroup.ActivityParams("home");
+        homeAct.setTypicalDuration(12 * 3600);
+        runConfig.scoring().addActivityParams(homeAct);
+        
+        ScoringConfigGroup.ActivityParams workAct = new ScoringConfigGroup.ActivityParams("work");
+        workAct.setTypicalDuration(8 * 3600);
+        runConfig.scoring().addActivityParams(workAct);
+        
+        ReplanningConfigGroup.StrategySettings strategySettings = new ReplanningConfigGroup.StrategySettings();
+        strategySettings.setStrategyName("ChangeExpBeta");
+        strategySettings.setWeight(1.0);
+        runConfig.replanning().addStrategySettings(strategySettings);
+        
+        Scenario runScenario = ScenarioUtils.createScenario(runConfig);
+        
+        // Copy network
+        Network network = runScenario.getNetwork();
+        for (Node node : scenario.getNetwork().getNodes().values()) {
+            network.addNode(network.getFactory().createNode(node.getId(), node.getCoord()));
+        }
+        for (Link link : scenario.getNetwork().getLinks().values()) {
+            Link newLink = network.getFactory().createLink(
+                link.getId(), 
+                network.getNodes().get(link.getFromNode().getId()),
+                network.getNodes().get(link.getToNode().getId()));
+            newLink.setLength(link.getLength());
+            newLink.setFreespeed(link.getFreespeed());
+            newLink.setCapacity(link.getCapacity());
+            newLink.setNumberOfLanes(link.getNumberOfLanes());
+            network.addLink(newLink);
+        }
+        
+        // Copy population
+        Population population = runScenario.getPopulation();
+        for (Person person : scenario.getPopulation().getPersons().values()) {
+            Person newPerson = population.getFactory().createPerson(person.getId());
+            for (Plan plan : person.getPlans()) {
+                Plan newPlan = population.getFactory().createPlan();
+                for (PlanElement pe : plan.getPlanElements()) {
+                    if (pe instanceof Activity) {
+                        Activity act = (Activity) pe;
+                        Activity newAct = population.getFactory().createActivityFromLinkId(
+                            act.getType(), act.getLinkId());
+                        if (act.getEndTime().isDefined()) {
+                            newAct.setEndTime(act.getEndTime().seconds());
+                        }
+                        newPlan.addActivity(newAct);
+                    } else if (pe instanceof Leg) {
+                        Leg leg = (Leg) pe;
+                        newPlan.addLeg(population.getFactory().createLeg(leg.getMode()));
+                    }
+                }
+                newPerson.addPlan(newPlan);
+            }
+            newPerson.setSelectedPlan(newPerson.getPlans().get(0));
+            population.addPerson(newPerson);
+        }
+        
+        if (useOffload) {
+            OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
+            offloadConfig.setStorageBackend(backend);
+            offloadConfig.setStoreDirectory(
+                new File(runConfig.controller().getOutputDirectory(), "store").toString());
+            offloadConfig.setCacheEntries(5);
+            runConfig.addModule(offloadConfig);
+        }
+        
+        Controler controler = new Controler(runScenario);
+        if (useOffload) {
+            controler.addOverridingModule(new OffloadModule());
+        }
         
         controler.run();
         
-        File outputPlansFile = new File(config.controller().getOutputDirectory(), 
+        // Read output population
+        File outputPlansFile = new File(runConfig.controller().getOutputDirectory(), 
             "output_plans.xml.gz");
-        assertTrue(outputPlansFile.exists(), "Output plans file should exist");
+        assertTrue(outputPlansFile.exists(), 
+            "Output plans file should exist for " + subfolder);
         
         Scenario outputScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         new PopulationReader(outputScenario).readFile(outputPlansFile.getAbsolutePath());
         
-        assertEquals(3, outputScenario.getPopulation().getPersons().size(), 
-            "All persons should be in output");
+        return outputScenario;
+    }
+    
+    private void compareScenarioResults(Scenario scenario1, Scenario scenario2, 
+                                         String name1, String name2) {
+        assertEquals(scenario1.getPopulation().getPersons().size(), 
+                     scenario2.getPopulation().getPersons().size(),
+                     String.format("%s and %s should have same number of persons", name1, name2));
+        
+        for (Id<Person> personId : scenario1.getPopulation().getPersons().keySet()) {
+            Person person1 = scenario1.getPopulation().getPersons().get(personId);
+            Person person2 = scenario2.getPopulation().getPersons().get(personId);
+            
+            assertNotNull(person2, 
+                String.format("Person %s should exist in both %s and %s", personId, name1, name2));
+            
+            assertEquals(person1.getPlans().size(), person2.getPlans().size(),
+                String.format("Person %s should have same number of plans in %s and %s", 
+                    personId, name1, name2));
+            
+            Plan selectedPlan1 = person1.getSelectedPlan();
+            Plan selectedPlan2 = person2.getSelectedPlan();
+            
+            assertNotNull(selectedPlan1, 
+                String.format("Person %s should have selected plan in %s", personId, name1));
+            assertNotNull(selectedPlan2, 
+                String.format("Person %s should have selected plan in %s", personId, name2));
+            
+            assertEquals(selectedPlan1.getPlanElements().size(), 
+                         selectedPlan2.getPlanElements().size(),
+                String.format("Person %s selected plan should have same elements in %s and %s", 
+                    personId, name1, name2));
+            
+            // Compare plan scores (should be identical for deterministic simulation)
+            if (selectedPlan1.getScore() != null && selectedPlan2.getScore() != null) {
+                assertEquals(selectedPlan1.getScore(), selectedPlan2.getScore(), 0.01,
+                    String.format("Person %s should have same score in %s and %s", 
+                        personId, name1, name2));
+            }
+        }
     }
     
     @Test
