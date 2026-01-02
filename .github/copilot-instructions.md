@@ -67,6 +67,6 @@ This repository contains code examples that accompany blog posts published on [i
 ## When Contributing New Examples
 1. Create a new package under `src/main/java/` named after the topic
 2. Add corresponding Python analysis notebooks if applicable
-3. Update the main README.md with links to the blog post and code
+3. Update the main readme.md with links to the blog post and code
 4. Ensure all dependencies are properly declared in `pom.xml` or `requirements.txt`
 5. Follow the existing pattern of self-contained, runnable examples
