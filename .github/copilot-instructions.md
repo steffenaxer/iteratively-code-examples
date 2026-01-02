@@ -11,7 +11,7 @@ This repository contains code examples that accompany blog posts published on [i
 ## Technology Stack
 
 ### Java
-- **Language Version**: Java 21/22
+- **Language Version**: Java 22 (properties specify 21, but compiler plugin uses 22)
 - **Build Tool**: Maven
 - **Main Framework**: MATSim (Multi-Agent Transport Simulation)
   - Version: 2026.0-PR4219
