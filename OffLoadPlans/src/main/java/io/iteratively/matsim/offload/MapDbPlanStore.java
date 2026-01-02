@@ -23,6 +23,7 @@ public final class MapDbPlanStore implements PlanStore {
 
     private final FuryPlanCodec codec;
     private final int maxPlansPerAgent;
+    private final Scenario scenario;
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
     private final ConcurrentHashMap<String, String> activePlanCache;
@@ -80,6 +81,7 @@ public final class MapDbPlanStore implements PlanStore {
 
     public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
         this.maxPlansPerAgent = maxPlansPerAgent;
+        this.scenario = scenario;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
         this.creationIterCache = new ConcurrentHashMap<>();
@@ -367,6 +369,22 @@ public final class MapDbPlanStore implements PlanStore {
         if (planId.equals(activePlanCache.get(personId))) {
             activePlanCache.remove(personId);
             activePlanByPerson.remove(personId);
+        }
+        
+        removePlanProxyFromPerson(personId, planId);
+    }
+    
+    private void removePlanProxyFromPerson(String personId, String planId) {
+        org.matsim.api.core.v01.population.Person person = scenario.getPopulation().getPersons().get(
+            org.matsim.api.core.v01.Id.createPersonId(personId)
+        );
+        if (person != null) {
+            person.getPlans().removeIf(plan -> {
+                if (plan instanceof PlanProxy proxy) {
+                    return proxy.getPlanId().equals(planId);
+                }
+                return false;
+            });
         }
     }
 
