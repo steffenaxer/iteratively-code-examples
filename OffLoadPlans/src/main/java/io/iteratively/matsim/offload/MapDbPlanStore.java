@@ -110,7 +110,12 @@ public final class MapDbPlanStore implements PlanStore {
         }
     }
 
-    private record PendingWrite(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {}
+    private record PendingWrite(String key, String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
+        // Constructor mit automatischer Key-Generierung
+        PendingWrite(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
+            this(key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
+        }
+    }
 
     public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
         this.maxPlansPerAgent = maxPlansPerAgent;
@@ -235,22 +240,24 @@ public final class MapDbPlanStore implements PlanStore {
     private void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String planType) {
         String k = key(personId, planId);
         
+        // Cache creationIter AUSSERHALB des synchronized Blocks
+        creationIterCache.putIfAbsent(k, iter);
+        
+        boolean shouldFlush;
         synchronized (pendingWrites) {
             pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, planType));
             
-            // Cache creationIter für neue Plans
-            if (!creationIterCache.containsKey(k)) {
-                creationIterCache.put(k, iter);
-            }
-
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
                 activePlanCache.put(personId, planId);
             }
 
-            if (pendingWrites.size() >= WRITE_BUFFER_SIZE) {
-                flushPendingWrites();
-            }
+            shouldFlush = pendingWrites.size() >= WRITE_BUFFER_SIZE;
+        }
+        
+        // Flush AUSSERHALB des synchronized Blocks um Lock-Zeit zu minimieren
+        if (shouldFlush) {
+            flushPendingWrites();
         }
     }
 
@@ -280,8 +287,7 @@ public final class MapDbPlanStore implements PlanStore {
         // Gruppiere nach Key um nur den letzten Stand zu behalten
         Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(size);
         for (PendingWrite pw : pendingWrites) {
-            String k = key(pw.personId, pw.planId);
-            latestByKey.put(k, pw);
+            latestByKey.put(pw.key, pw);  // Nutze pre-computed key
             if (pw.makeSelected) {
                 activeBatch.put(pw.personId, pw.planId);
             }
@@ -292,14 +298,13 @@ public final class MapDbPlanStore implements PlanStore {
         // Das eliminiert tausende langsame DB-Zugriffe während des Flush!
         for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
             PendingWrite pw = entry.getValue();
-            String k = entry.getKey();
             
             // Nutze Cache für creationIter - kein DB-Lookup!
-            int creationIter = creationIterCache.getOrDefault(k, pw.iter);
+            int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
             
             // Direkte Serialisierung ohne PlanData-Objekt zu erstellen
             byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
-            dataBatch.put(k, serialized);
+            dataBatch.put(pw.key, serialized);
         }
 
         // Batch-Write: Alle Daten auf einmal schreiben
