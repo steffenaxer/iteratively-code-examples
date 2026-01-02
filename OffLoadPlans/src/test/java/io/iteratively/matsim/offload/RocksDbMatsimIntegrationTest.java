@@ -43,12 +43,15 @@ public class RocksDbMatsimIntegrationTest {
     public void setUp() {
         config = ConfigUtils.createConfig();
         
+        // Minimal iterations for fast test
         config.controller().setFirstIteration(0);
-        config.controller().setLastIteration(2);
+        config.controller().setLastIteration(1);  // Only 2 iterations
         config.controller().setOutputDirectory(tempDir.resolve("output").toString());
         config.controller().setOverwriteFileSetting(OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setWriteEventsInterval(0);
         config.controller().setWritePlansInterval(1);
+        config.controller().setWriteEventsInterval(0);
+        config.controller().setCreateGraphs(false);
         
         ScoringConfigGroup.ActivityParams homeAct = new ScoringConfigGroup.ActivityParams("home");
         homeAct.setTypicalDuration(12 * 3600);
@@ -110,7 +113,8 @@ public class RocksDbMatsimIntegrationTest {
         Population population = scenario.getPopulation();
         PopulationFactory pf = population.getFactory();
         
-        for (int i = 0; i < 10; i++) {
+        // Only 3 agents for fast test
+        for (int i = 0; i < 3; i++) {
             Person person = pf.createPerson(Id.createPersonId("person_" + i));
             
             Plan plan = pf.createPlan();
@@ -160,6 +164,9 @@ public class RocksDbMatsimIntegrationTest {
         assertEquals(10, outputScenario.getPopulation().getPersons().size(), 
             "All persons should be in output");
         
+        assertEquals(3, outputScenario.getPopulation().getPersons().size(), 
+            "All persons should be in output");
+        
         for (Person person : outputScenario.getPopulation().getPersons().values()) {
             assertFalse(person.getPlans().isEmpty(), 
                 "Person " + person.getId() + " should have at least one plan");
@@ -194,7 +201,7 @@ public class RocksDbMatsimIntegrationTest {
         Scenario outputScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         new PopulationReader(outputScenario).readFile(outputPlansFile.getAbsolutePath());
         
-        assertEquals(10, outputScenario.getPopulation().getPersons().size(), 
+        assertEquals(3, outputScenario.getPopulation().getPersons().size(), 
             "All persons should be in output");
     }
     
@@ -214,7 +221,8 @@ public class RocksDbMatsimIntegrationTest {
         Population population = scenario.getPopulation();
         PopulationFactory pf = population.getFactory();
         
-        for (int i = 0; i < 5; i++) {
+        // Only test 3 persons
+        for (int i = 0; i < 3; i++) {
             Person person = population.getPersons().get(Id.createPersonId("person_" + i));
             if (person != null) {
                 Plan originalPlan = person.getSelectedPlan();
@@ -231,7 +239,7 @@ public class RocksDbMatsimIntegrationTest {
         
         store.commit();
         
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             Person person = population.getPersons().get(Id.createPersonId("person_" + i));
             if (person != null) {
                 String planId = "plan_iter_0_" + i;

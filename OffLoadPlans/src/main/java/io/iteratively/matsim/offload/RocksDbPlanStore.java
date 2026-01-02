@@ -234,7 +234,7 @@ public final class RocksDbPlanStore implements PlanStore {
         boolean shouldFlush;
         lock.readLock().lock();
         try {
-            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType, k));
+            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType));
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
                 activePlanCache.put(personId, planId);
