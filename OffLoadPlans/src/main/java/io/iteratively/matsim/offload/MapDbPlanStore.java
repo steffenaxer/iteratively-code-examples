@@ -106,9 +106,9 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     private record PendingWrite(String key, String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
-        // Constructor mit automatischer Key-Generierung
-        PendingWrite(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
-            this(key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
+        // Factory-Methode zur Erzeugung mit automatischer Key-Generierung
+        static PendingWrite create(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
+            return new PendingWrite(key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
         }
     }
 
@@ -229,7 +229,7 @@ public final class MapDbPlanStore implements PlanStore {
         
         boolean shouldFlush;
         synchronized (pendingWrites) {
-            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, planType));
+            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType));
             
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
