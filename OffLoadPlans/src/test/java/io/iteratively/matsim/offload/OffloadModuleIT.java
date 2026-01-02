@@ -31,6 +31,7 @@ public class OffloadModuleIT {
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
         offloadConfig.setCacheEntries(2000);
+        offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
@@ -44,12 +45,12 @@ public class OffloadModuleIT {
         controler.addOverridingModule(new OffloadModule());
         controler.run();
 
-        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
+        File rocksDbDir = new File(storeDir, "rocksdb");
 
-        assertTrue(dbFile.exists(), "MapDB file should exist");
-        assertTrue(dbFile.length() > 0, "MapDB file should contain data");
+        assertTrue(rocksDbDir.exists(), "RocksDB directory should exist");
+        assertTrue(rocksDbDir.isDirectory(), "RocksDB store should be a directory");
 
-        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
+        try (RocksDbPlanStore store = new RocksDbPlanStore(storeDir, scenario,
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             int storedPlans = 0;
             for (Person person : scenario.getPopulation().getPersons().values()) {
