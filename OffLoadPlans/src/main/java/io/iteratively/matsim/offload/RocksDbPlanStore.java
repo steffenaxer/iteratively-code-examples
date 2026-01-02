@@ -253,43 +253,45 @@ public final class RocksDbPlanStore implements PlanStore {
     }
 
     private void flushPendingWrites() {
-        if (pendingWrites.isEmpty()) return;
+        List<PendingWrite> toFlush;
+        synchronized (pendingWrites) {
+            if (pendingWrites.isEmpty()) return;
+            toFlush = new ArrayList<>(pendingWrites);
+            pendingWrites.clear();
+        }
 
-        log.info("Flushing {} pending writes to RocksDB...", pendingWrites.size());
+        log.info("Flushing {} pending writes to RocksDB...", toFlush.size());
         long start = System.currentTimeMillis();
 
-        synchronized (pendingWrites) {
-            try (WriteBatch batch = new WriteBatch()) {
-                Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(pendingWrites.size());
-                Set<String> affectedPersons = new HashSet<>();
+        try (WriteBatch batch = new WriteBatch()) {
+            Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(toFlush.size());
+            Set<String> affectedPersons = new HashSet<>();
 
-                for (PendingWrite pw : pendingWrites) {
-                    latestByKey.put(pw.key, pw);
-                    if (pw.makeSelected) {
-                        batch.put(prefixedKey(ACTIVE_PLAN_PREFIX, pw.personId), pw.planId.getBytes());
-                    }
-                    affectedPersons.add(pw.personId);
+            for (PendingWrite pw : toFlush) {
+                latestByKey.put(pw.key, pw);
+                if (pw.makeSelected) {
+                    batch.put(prefixedKey(ACTIVE_PLAN_PREFIX, pw.personId), pw.planId.getBytes());
                 }
-
-                for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
-                    PendingWrite pw = entry.getValue();
-                    int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
-                    byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
-                    batch.put(prefixedKey(PLAN_DATA_PREFIX, pw.key), serialized);
-                }
-
-                for (String personId : affectedPersons) {
-                    List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
-                    batch.put(prefixedKey(PLAN_INDEX_PREFIX, personId), joinPlanIds(currentIds).getBytes());
-                }
-
-                db.write(writeOptions, batch);
-                pendingWrites.clear();
-
-                log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
-            } catch (RocksDBException e) {
-                throw new RuntimeException("Failed to flush pending writes", e);
+                affectedPersons.add(pw.personId);
             }
+
+            for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
+                PendingWrite pw = entry.getValue();
+                int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
+                byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
+                batch.put(prefixedKey(PLAN_DATA_PREFIX, pw.key), serialized);
+            }
+
+            for (String personId : affectedPersons) {
+                List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
+                batch.put(prefixedKey(PLAN_INDEX_PREFIX, personId), joinPlanIds(currentIds).getBytes());
+            }
+
+            db.write(writeOptions, batch);
+
+            log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to flush pending writes", e);
         }
     }
 
