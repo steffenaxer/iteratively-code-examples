@@ -5,8 +5,10 @@ import org.apache.logging.log4j.Logger;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
+import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.population.io.StreamingPopulationReader;
 import org.matsim.core.population.algorithms.PersonAlgorithm;
+import org.matsim.core.scenario.ScenarioUtils;
 
 /**
  * Streaming population loader that reads a population file and loads all plans
@@ -24,19 +26,19 @@ public class StreamingPopulationLoader {
     private static final Logger log = LogManager.getLogger(StreamingPopulationLoader.class);
     
     private final PlanStore planStore;
-    private final Scenario scenario;
+    private final Scenario targetScenario;
     private final int initialIteration;
     
     /**
      * Creates a new streaming population loader.
      * 
      * @param planStore the plan store to load non-selected plans into
-     * @param scenario the scenario containing the population to be populated
+     * @param targetScenario the scenario containing the population to be populated
      * @param initialIteration the initial iteration number (typically 0)
      */
-    public StreamingPopulationLoader(PlanStore planStore, Scenario scenario, int initialIteration) {
+    public StreamingPopulationLoader(PlanStore planStore, Scenario targetScenario, int initialIteration) {
         this.planStore = planStore;
-        this.scenario = scenario;
+        this.targetScenario = targetScenario;
         this.initialIteration = initialIteration;
     }
     
@@ -46,7 +48,7 @@ public class StreamingPopulationLoader {
      * <p>This method reads the population file and for each person:
      * <ul>
      *   <li>Stores all plans (including selected) in the plan store</li>
-     *   <li>Adds the person with only the selected plan as a proxy to the population</li>
+     *   <li>Adds person to the target scenario population (without plans)</li>
      * </ul>
      * 
      * @param filename the path to the population file to load
@@ -54,18 +56,21 @@ public class StreamingPopulationLoader {
     public void loadFromFile(String filename) {
         log.info("Starting streaming population load from: {}", filename);
         
-        StreamingPopulationReader reader = new StreamingPopulationReader(scenario);
+        // Create a temporary scenario for reading
+        Scenario tempScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        
+        StreamingPopulationReader reader = new StreamingPopulationReader(tempScenario);
         reader.addAlgorithm(new PopulationLoadingAlgorithm());
         reader.readFile(filename);
         
         planStore.commit();
-        log.info("Streaming population load completed");
+        log.info("Streaming population load completed. {} persons in population.",
+            targetScenario.getPopulation().getPersons().size());
     }
     
     /**
      * Algorithm that processes each person during streaming population reading.
-     * Stores all plans in the plan store and adds only the selected plan as a proxy
-     * to the population.
+     * Stores all plans in the plan store and adds person (without plans) to target population.
      */
     private class PopulationLoadingAlgorithm implements PersonAlgorithm {
         private int personCount = 0;
@@ -90,15 +95,15 @@ public class StreamingPopulationLoader {
                 planStore.putPlan(personId, planId, plan, score, initialIteration, isSelected);
             }
             
-            // Create a person in the scenario with only selected plan as proxy
-            Person scenarioPerson = scenario.getPopulation().getFactory().createPerson(person.getId());
+            // Add person to target scenario population without plans
+            // (plans will be loaded as proxies later)
+            Person scenarioPerson = targetScenario.getPopulation().getFactory().createPerson(person.getId());
             
             // Copy person attributes
             person.getAttributes().getAsMap().forEach((key, value) -> 
                 scenarioPerson.getAttributes().putAttribute(key, value));
             
-            // Add person to population (plans will be loaded as proxies later)
-            scenario.getPopulation().addPerson(scenarioPerson);
+            targetScenario.getPopulation().addPerson(scenarioPerson);
         }
     }
     
