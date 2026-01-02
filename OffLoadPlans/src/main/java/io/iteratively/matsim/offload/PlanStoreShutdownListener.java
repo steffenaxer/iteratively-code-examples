@@ -29,8 +29,9 @@ public class PlanStoreShutdownListener implements ShutdownListener {
 
     private void dumpPlanStore(ShutdownEvent event) {
         var config = event.getServices().getConfig();
-        String fullPath = config.controller().getOutputDirectory() + "/output_plans_fromStore.xml" 
-                + config.controller().getCompressionType().fileEnding;
+        var controller = config.controller();
+        String fullPath = controller.getOutputDirectory() + "/output_plans_fromStore.xml" 
+                + controller.getCompressionType().fileEnding;
 
         StreamingPopulationWriter writer = new StreamingPopulationWriter();
         writer.startStreaming(fullPath);
