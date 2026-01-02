@@ -1,8 +1,34 @@
-# Performance-Optimierungen für MapDbPlanStore
+# Performance-Optimierungen für Plan-Speicherung
 
 ## Übersicht
 
-Diese Dokumentation beschreibt die Optimierungen zur Beschleunigung der Schreib-Performance im `MapDbPlanStore`. Der Fokus liegt auf der Reduzierung der Zeit, die benötigt wird, um MATSim-Plans in die MapDB zu schreiben.
+Diese Dokumentation beschreibt die Optimierungen zur Beschleunigung der Schreib-Performance bei der Plan-Speicherung. Es stehen zwei Storage-Backends zur Verfügung:
+
+1. **MapDB** - Java-basierte embedded database (Standard)
+2. **RocksDB** - High-performance key-value store (für große Simulationen)
+
+Der Fokus liegt auf der Reduzierung der Zeit, die benötigt wird, um MATSim-Plans zu persistieren.
+
+## Storage-Backend Auswahl
+
+### MapDB
+- **Typ**: Pure Java embedded database
+- **Vorteile**: Einfaches Deployment, stabil, gut für moderate Simulationen
+- **Optimierungen**: Transaktions-Batching, Memory-mapped I/O, Kompression
+- **Empfohlen für**: Standard-Anwendungsfälle, bis zu ~100k Agenten
+
+### RocksDB
+- **Typ**: Native C++ key-value store mit JNI bindings
+- **Vorteile**: Extrem schnell, optimiert für write-heavy workloads, LZ4 Kompression
+- **Optimierungen**: Write buffer pooling, async I/O, background compaction
+- **Empfohlen für**: Große Simulationen (>100k Agenten), höchste Performance-Anforderungen
+
+**Konfiguration**:
+```xml
+<module name="offload">
+    <param name="storageBackend" value="ROCKSDB" />  <!-- oder MAPDB -->
+</module>
+```
 
 ## Problem
 

@@ -39,8 +39,17 @@ public final class OffloadModule extends AbstractModule {
         }
         baseDir.mkdirs();
 
-        File dbFile = new File(baseDir, OffloadConfigGroup.DB_FILE_NAME);
-        return new MapDbPlanStore(dbFile, scenario, maxPlans);
+        return switch (offloadConfig.getStorageBackend()) {
+            case MAPDB -> {
+                File dbFile = new File(baseDir, OffloadConfigGroup.DB_FILE_NAME);
+                yield new MapDbPlanStore(dbFile, scenario, maxPlans);
+            }
+            case ROCKSDB -> {
+                File rocksDir = new File(baseDir, "rocksdb");
+                rocksDir.mkdirs();
+                yield new RocksDbPlanStore(rocksDir, scenario, maxPlans);
+            }
+        };
     }
 
     @Provides

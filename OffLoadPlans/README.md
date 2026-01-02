@@ -145,8 +145,35 @@ The latest version includes several critical optimizations focused on **write pe
 <module name="offload">
     <param name="cacheEntries" value="2000" />
     <param name="storeDirectory" value="/path/to/store" />
+    <param name="storageBackend" value="MAPDB" />  <!-- or ROCKSDB -->
 </module>
 ```
+
+### Storage Backend Options
+
+**MapDB** (default):
+- Java-based embedded database
+- Good for moderate-sized simulations
+- Proven stability
+- Optimized with transaction batching
+
+**RocksDB**:
+- High-performance key-value store from Facebook
+- Better for large-scale simulations
+- Native C++ implementation with JNI bindings
+- LZ4 compression enabled
+- Optimized for write-heavy workloads
+- May offer better performance for very large datasets
+
+Choose RocksDB if:
+- You have millions of plans to store
+- Write performance is critical
+- You need the absolute best throughput
+
+Choose MapDB if:
+- You prefer pure Java solution
+- Your simulation is moderate-sized
+- You want simpler deployment (no native libraries)
 
 ## Usage Example
 
@@ -157,6 +184,7 @@ Config config = ConfigUtils.loadConfig("config.xml");
 OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
 offloadConfig.setStoreDirectory("planstore");
 offloadConfig.setCacheEntries(2000);
+offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);  // or MAPDB
 
 Controler controler = new Controler(scenario);
 controler.addOverridingModule(new OffloadModule());
