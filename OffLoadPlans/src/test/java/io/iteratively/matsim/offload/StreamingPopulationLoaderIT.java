@@ -112,7 +112,7 @@ public class StreamingPopulationLoaderIT {
         network.addLink(link31);
     }
     
-    private void createAndWritePopulation(int personCount, int plansPerPerson) {
+    private void createAndWritePopulation(int personCount, int plansPerPerson, File outputFile) {
         Scenario tempScenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         Population population = tempScenario.getPopulation();
         PopulationFactory pf = population.getFactory();
@@ -153,14 +153,14 @@ public class StreamingPopulationLoaderIT {
             population.addPerson(person);
         }
         
-        populationFile = new File(utils.getOutputDirectory(), "input_population.xml.gz");
-        new PopulationWriter(population).write(populationFile.getAbsolutePath());
+        new PopulationWriter(population).write(outputFile.getAbsolutePath());
+        populationFile = outputFile;  // Update the global variable for tests that need it
     }
     
     @Test
     public void testStreamingPopulationLoader() throws Exception {
         // Create a population file with multiple plans per person
-        createAndWritePopulation(10, 4);
+        createAndWritePopulation(10, 4, new File(utils.getOutputDirectory(), "input_population.xml.gz"));
         
         // Setup offload configuration
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
@@ -221,8 +221,11 @@ public class StreamingPopulationLoaderIT {
     
     @Test
     public void testStreamingModuleIntegration() {
-        // Create population file
-        createAndWritePopulation(5, 3);
+        // Create population file OUTSIDE the output directory (parent directory)
+        File popFileDir = new File(utils.getOutputDirectory()).getParentFile();
+        File popFile = new File(popFileDir, "testStreamingModuleIntegration_population.xml.gz");
+        
+        createAndWritePopulation(5, 3, popFile);
         
         // Setup new scenario without loading population
         Scenario runScenario = ScenarioUtils.createScenario(config);
@@ -254,7 +257,7 @@ public class StreamingPopulationLoaderIT {
         // Create controller with streaming module
         Controler controler = new Controler(runScenario);
         controler.addOverridingModule(new OffloadModule());
-        controler.addOverridingModule(new StreamingOffloadModule(populationFile.getAbsolutePath()));
+        controler.addOverridingModule(new StreamingOffloadModule(popFile.getAbsolutePath()));
         
         controler.run();
         
@@ -279,14 +282,17 @@ public class StreamingPopulationLoaderIT {
     
     @Test
     public void testCompareStreamingVsNonStreaming() {
-        // Create population file
-        createAndWritePopulation(5, 3);
+        // Create population file OUTSIDE the output directory (parent directory)
+        File popFileDir = new File(utils.getOutputDirectory()).getParentFile();
+        File popFile = new File(popFileDir, "testCompareStreamingVsNonStreaming_population.xml.gz");
+        
+        createAndWritePopulation(5, 3, popFile);
         
         // Run with streaming
-        Scenario streamingResult = runWithStreaming(populationFile.getAbsolutePath());
+        Scenario streamingResult = runWithStreaming(popFile.getAbsolutePath());
         
         // Run without streaming (traditional approach)
-        Scenario traditionalResult = runTraditional();
+        Scenario traditionalResult = runTraditional(popFile.getAbsolutePath());
         
         // Compare results
         assertEquals(streamingResult.getPopulation().getPersons().size(),
@@ -333,13 +339,13 @@ public class StreamingPopulationLoaderIT {
         return readOutputScenario(runConfig);
     }
     
-    private Scenario runTraditional() {
+    private Scenario runTraditional(String popFile) {
         Config runConfig = createRunConfig("traditional");
         Scenario runScenario = ScenarioUtils.createScenario(runConfig);
         copyNetwork(runScenario);
         
         // Load population traditionally
-        new PopulationReader(runScenario).readFile(populationFile.getAbsolutePath());
+        new PopulationReader(runScenario).readFile(popFile);
         
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
