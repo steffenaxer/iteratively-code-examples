@@ -12,6 +12,35 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
+/**
+ * Hochperformante Plan-Speicherung mit MapDB und Fury Serialisierung.
+ * 
+ * PERFORMANCE-OPTIMIERUNGEN FÜR SCHREIB-OPERATIONEN:
+ * 
+ * 1. ELIMIERUNG VON DB-LOOKUPS WÄHREND FLUSH (größte Verbesserung!)
+ *    - creationIterCache vermeidet tausende DB-Zugriffe beim Flush
+ *    - Vorher: planDataMap.get() für jeden Plan während flush
+ *    - Nachher: Direkte Cache-Nutzung
+ * 
+ * 2. GRÖSSERER WRITE-BUFFER
+ *    - Erhöht von 50.000 auf 100.000 Einträge
+ *    - Reduziert Anzahl der Flush-Operationen
+ *    - Bessere Batch-Effizienz
+ * 
+ * 3. OPTIMIERTE DATEN-SERIALISIERUNG
+ *    - serializeDirect() vermeidet PlanData-Objekt-Instanziierung
+ *    - Vorallokierte ByteArrayOutputStream mit exakter Größe
+ *    - Reduziert Memory-Allokationen
+ * 
+ * 4. MAPDB-KONFIGURATION
+ *    - Transaktionen aktiviert für konsistente Batch-Commits
+ *    - Größerer Startallokation (1 GB) und Inkrement (512 MB)
+ *    - Memory-mapped I/O für schnelleren Zugriff
+ * 
+ * 5. THREAD-POOL FÜR ZUKÜNFTIGE PARALLELISIERUNG
+ *    - Vorbereitet für parallele Serialisierung falls nötig
+ *    - CPU-Kern-basierte Pool-Größe
+ */
 public final class MapDbPlanStore implements PlanStore {
     private static final Logger log = LogManager.getLogger(MapDbPlanStore.class);
     private static final Pattern COMMA_PATTERN = Pattern.compile(",");
@@ -26,15 +55,27 @@ public final class MapDbPlanStore implements PlanStore {
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
     private final ConcurrentHashMap<String, String> activePlanCache;
+    
+    // Cache für creationIter um DB-Lookups während Flush zu vermeiden
+    private final ConcurrentHashMap<String, Integer> creationIterCache;
 
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
-    private static final int WRITE_BUFFER_SIZE = 50_000;  // Größerer Buffer
+    private static final int WRITE_BUFFER_SIZE = 100_000;  // Noch größerer Buffer für weniger Flush-Operationen
+    
+    // Thread-Pool für parallele Serialisierung
+    private final ExecutorService serializationExecutor;
+    private final int parallelSerializationThreads;
 
     // Konsolidiertes Datenformat für alle Plan-Metadaten
     private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type) implements Serializable {
-        byte[] serialize() {
-            try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                 DataOutputStream dos = new DataOutputStream(baos)) {
+        // Optimierte Serialisierung: direkt in vorbereiteten Buffer schreiben
+        static byte[] serializeDirect(byte[] blob, double score, int creationIter, int lastUsedIter, String type) {
+            try {
+                // Berechne exakte Größe im Voraus
+                int size = 4 + blob.length + 8 + 4 + 4 + 1 + (type != null ? 2 + type.getBytes("UTF-8").length : 0);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(size);
+                DataOutputStream dos = new DataOutputStream(baos);
+                
                 dos.writeInt(blob.length);
                 dos.write(blob);
                 dos.writeDouble(score);
@@ -46,6 +87,10 @@ public final class MapDbPlanStore implements PlanStore {
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
+        }
+        
+        byte[] serialize() {
+            return serializeDirect(blob, score, creationIter, lastUsedIter, type);
         }
 
         static PlanData deserialize(byte[] data) {
@@ -71,13 +116,26 @@ public final class MapDbPlanStore implements PlanStore {
         this.maxPlansPerAgent = maxPlansPerAgent;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
+        this.creationIterCache = new ConcurrentHashMap<>();
+        
+        // Thread-Pool für parallele Serialisierung (CPU-Kerne - 1, mindestens 2)
+        this.parallelSerializationThreads = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+        this.serializationExecutor = Executors.newFixedThreadPool(
+            parallelSerializationThreads,
+            r -> {
+                Thread t = new Thread(r, "PlanSerializer");
+                t.setDaemon(true);
+                return t;
+            }
+        );
 
         this.db = DBMaker
                 .fileDB(file)
                 .fileMmapEnableIfSupported()
-                .allocateStartSize(512 * 1024 * 1024)
-                .allocateIncrement(256 * 1024 * 1024)
+                .allocateStartSize(1024 * 1024 * 1024)  // 1 GB Startgröße
+                .allocateIncrement(512 * 1024 * 1024)   // 512 MB Inkrement
                 .fileMmapPreclearDisable()
+                .transactionEnable()  // Transaktionen für batch commits
                 .executorEnable()  // Async writes
                 .closeOnJvmShutdown()
                 .make();
@@ -161,27 +219,29 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public void putPlan(String personId, String planId, Plan plan, double score, int iter, boolean makeSelected) {
+        // Serialisierung AUSSERHALB des synchronized Blocks für bessere Performance
         byte[] blob = codec.serialize(plan);
         String planType = plan.getType();
-
-        synchronized (pendingWrites) {
-            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, planType));
-
-            updatePlanIndexCache(personId, planId);
-            if (makeSelected) {
-                activePlanCache.put(personId, planId);
-            }
-
-            if (pendingWrites.size() >= WRITE_BUFFER_SIZE) {
-                flushPendingWrites();
-            }
-        }
+        
+        putPlanRaw(personId, planId, blob, score, iter, makeSelected, planType);
     }
 
     @Override
     public void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected) {
+        putPlanRaw(personId, planId, blob, score, iter, makeSelected, null);
+    }
+    
+    // Interne Methode mit planType Parameter
+    private void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String planType) {
+        String k = key(personId, planId);
+        
         synchronized (pendingWrites) {
-            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, null));
+            pendingWrites.add(new PendingWrite(personId, planId, blob, score, iter, makeSelected, planType));
+            
+            // Cache creationIter für neue Plans
+            if (!creationIterCache.containsKey(k)) {
+                creationIterCache.put(k, iter);
+            }
 
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
@@ -228,32 +288,41 @@ public final class MapDbPlanStore implements PlanStore {
             affectedPersons.add(pw.personId);
         }
 
+        // KRITISCHE OPTIMIERUNG: Nutze Cache statt DB-Lookups
+        // Das eliminiert tausende langsame DB-Zugriffe während des Flush!
         for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
             PendingWrite pw = entry.getValue();
-            // Hole existierende Daten für creationIter
-            byte[] existing = planDataMap.get(entry.getKey());
-            int creationIter = pw.iter;
-            if (existing != null) {
-                PlanData old = PlanData.deserialize(existing);
-                creationIter = old.creationIter;
-            }
-            PlanData data = new PlanData(pw.blob, pw.score, creationIter, pw.iter, pw.type);
-            dataBatch.put(entry.getKey(), data.serialize());
+            String k = entry.getKey();
+            
+            // Nutze Cache für creationIter - kein DB-Lookup!
+            int creationIter = creationIterCache.getOrDefault(k, pw.iter);
+            
+            // Direkte Serialisierung ohne PlanData-Objekt zu erstellen
+            byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
+            dataBatch.put(k, serialized);
         }
 
+        // Batch-Write: Alle Daten auf einmal schreiben
         planDataMap.putAll(dataBatch);
-        activePlanByPerson.putAll(activeBatch);
+        if (!activeBatch.isEmpty()) {
+            activePlanByPerson.putAll(activeBatch);
+        }
 
         Map<String, String> indexBatch = new HashMap<>(affectedPersons.size());
         for (String personId : affectedPersons) {
             List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
             indexBatch.put(personId, joinPlanIds(currentIds));
         }
-        planIndexByPerson.putAll(indexBatch);
+        if (!indexBatch.isEmpty()) {
+            planIndexByPerson.putAll(indexBatch);
+        }
+
+        // Commit Transaktion für konsistente Schreibvorgänge
+        db.commit();
 
         pendingWrites.clear();
 
-        log.info("Flush completed in {} ms", System.currentTimeMillis() - start);
+        log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
     }
 
     private int enforcePlanLimitLazy(String personId) {
@@ -304,10 +373,13 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public void updateScore(String personId, String planId, double score, int iter) {
+        String k = key(personId, planId);
         PlanData existing = getPlanData(personId, planId);
         if (existing != null) {
             PlanData updated = new PlanData(existing.blob, score, existing.creationIter, iter, existing.type);
-            planDataMap.put(key(personId, planId), updated.serialize());
+            planDataMap.put(k, updated.serialize());
+            // Update cache
+            creationIterCache.put(k, existing.creationIter);
         }
     }
 
@@ -341,7 +413,9 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     private void deletePlanInternal(String personId, String planId) {
-        planDataMap.remove(key(personId, planId));
+        String k = key(personId, planId);
+        planDataMap.remove(k);
+        creationIterCache.remove(k);  // Cache aufräumen
 
         planIdCache.computeIfPresent(personId, (key, list) -> {
             List<String> newList = new ArrayList<>(list);
@@ -371,6 +445,18 @@ public final class MapDbPlanStore implements PlanStore {
     @Override
     public void close() {
         commit();
+        
+        // Executor ordentlich beenden
+        serializationExecutor.shutdown();
+        try {
+            if (!serializationExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
+                serializationExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            serializationExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        
         db.close();
     }
 }
