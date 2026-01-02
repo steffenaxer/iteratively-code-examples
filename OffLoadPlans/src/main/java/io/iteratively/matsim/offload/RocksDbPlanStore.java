@@ -2,24 +2,23 @@ package io.iteratively.matsim.offload;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mapdb.*;
-import org.mapdb.serializer.SerializerCompressionWrapper;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Plan;
+import org.rocksdb.*;
 
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
-public final class MapDbPlanStore implements PlanStore {
-    private static final Logger log = LogManager.getLogger(MapDbPlanStore.class);
+public final class RocksDbPlanStore implements PlanStore {
+    private static final Logger log = LogManager.getLogger(RocksDbPlanStore.class);
     private static final Pattern COMMA_PATTERN = Pattern.compile(",");
 
-    private final DB db;
-    private final HTreeMap<String, byte[]> planDataMap;  // Konsolidiert: blob + metadata
-    private final HTreeMap<String, String> activePlanByPerson;
-    private final HTreeMap<String, String> planIndexByPerson;
+    private final RocksDB db;
+    private final WriteOptions writeOptions;
+    private final ReadOptions readOptions;
 
     private final FuryPlanCodec codec;
     private final int maxPlansPerAgent;
@@ -31,6 +30,12 @@ public final class MapDbPlanStore implements PlanStore {
 
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
     private static final int WRITE_BUFFER_SIZE = 100_000;
+    
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private static final byte[] PLAN_DATA_PREFIX = "pd:".getBytes();
+    private static final byte[] ACTIVE_PLAN_PREFIX = "ap:".getBytes();
+    private static final byte[] PLAN_INDEX_PREFIX = "pi:".getBytes();
 
     private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type) implements Serializable {
         static byte[] serializeDirect(byte[] blob, double score, int creationIter, int lastUsedIter, String type) {
@@ -51,7 +56,7 @@ public final class MapDbPlanStore implements PlanStore {
                 throw new UncheckedIOException(e);
             }
         }
-        
+
         byte[] serialize() {
             return serializeDirect(blob, score, creationIter, lastUsedIter, type);
         }
@@ -75,39 +80,53 @@ public final class MapDbPlanStore implements PlanStore {
 
     private record PendingWrite(String key, String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
         static PendingWrite create(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
-            return new PendingWrite(MapDbPlanStore.key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
+            return new PendingWrite(RocksDbPlanStore.key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
         }
     }
 
-    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
+    public RocksDbPlanStore(File directory, Scenario scenario, int maxPlansPerAgent) {
         this.maxPlansPerAgent = maxPlansPerAgent;
         this.scenario = scenario;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
         this.creationIterCache = new ConcurrentHashMap<>();
 
-        this.db = DBMaker
-                .fileDB(file)
-                .fileMmapEnableIfSupported()
-                .allocateStartSize(256 * 1024 * 1024)
-                .allocateIncrement(128 * 1024 * 1024)
-                .fileMmapPreclearDisable()
-                .transactionEnable()
-                .executorEnable()
-                .closeOnJvmShutdown()
-                .make();
+        try {
+            RocksDB.loadLibrary();
 
-        this.planDataMap = db.hashMap("planData", Serializer.STRING,
-                        new SerializerCompressionWrapper<>(Serializer.BYTE_ARRAY))
-                .createOrOpen();
-        this.activePlanByPerson = db.hashMap("activePlan", Serializer.STRING, Serializer.STRING).createOrOpen();
-        this.planIndexByPerson = db.hashMap("planIndex", Serializer.STRING, Serializer.STRING).createOrOpen();
+            Options options = new Options();
+            options.setCreateIfMissing(true);
+            options.setWriteBufferSize(256 * 1024 * 1024);
+            options.setMaxWriteBufferNumber(3);
+            options.setCompressionType(CompressionType.LZ4_COMPRESSION);
+            options.setMaxBackgroundJobs(4);
+
+            this.db = RocksDB.open(options, directory.getAbsolutePath());
+
+            this.writeOptions = new WriteOptions();
+            this.writeOptions.setSync(false);
+            this.writeOptions.setDisableWAL(false);
+
+            this.readOptions = new ReadOptions();
+            this.readOptions.setFillCache(true);
+
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to initialize RocksDB", e);
+        }
 
         this.codec = new FuryPlanCodec(scenario.getPopulation().getFactory());
     }
 
     private static String key(String personId, String planId) {
         return personId + "|" + planId;
+    }
+
+    private static byte[] prefixedKey(byte[] prefix, String key) {
+        byte[] keyBytes = key.getBytes();
+        byte[] result = new byte[prefix.length + keyBytes.length];
+        System.arraycopy(prefix, 0, result, 0, prefix.length);
+        System.arraycopy(keyBytes, 0, result, prefix.length, keyBytes.length);
+        return result;
     }
 
     private static String joinPlanIds(List<String> ids) {
@@ -129,15 +148,28 @@ public final class MapDbPlanStore implements PlanStore {
     public Optional<String> getActivePlanId(String personId) {
         String cached = activePlanCache.get(personId);
         if (cached != null) return Optional.of(cached);
-        String active = activePlanByPerson.get(personId);
-        if (active != null) activePlanCache.put(personId, active);
-        return Optional.ofNullable(active);
+        
+        try {
+            byte[] value = db.get(readOptions, prefixedKey(ACTIVE_PLAN_PREFIX, personId));
+            if (value != null) {
+                String active = new String(value);
+                activePlanCache.put(personId, active);
+                return Optional.of(active);
+            }
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to get active plan", e);
+        }
+        return Optional.empty();
     }
 
     @Override
     public void setActivePlanId(String personId, String planId) {
         activePlanCache.put(personId, planId);
-        activePlanByPerson.put(personId, planId);
+        try {
+            db.put(writeOptions, prefixedKey(ACTIVE_PLAN_PREFIX, personId), planId.getBytes());
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to set active plan", e);
+        }
     }
 
     @Override
@@ -146,7 +178,9 @@ public final class MapDbPlanStore implements PlanStore {
         if (ids.isEmpty()) return List.of();
 
         String activeId = activePlanCache.get(personId);
-        if (activeId == null) activeId = activePlanByPerson.get(personId);
+        if (activeId == null) {
+            activeId = getActivePlanId(personId).orElse(null);
+        }
 
         List<PlanHeader> out = new ArrayList<>(ids.size());
         for (String pid : ids) {
@@ -160,17 +194,27 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     private PlanData getPlanData(String personId, String planId) {
-        // Erst in pending writes suchen
-        synchronized (pendingWrites) {
+        String k = key(personId, planId);
+        
+        lock.readLock().lock();
+        try {
             for (int i = pendingWrites.size() - 1; i >= 0; i--) {
                 PendingWrite pw = pendingWrites.get(i);
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
-                    return new PlanData(pw.blob, pw.score, pw.iter, pw.iter, pw.type);
+                    int creationIter = creationIterCache.getOrDefault(k, pw.iter);
+                    return new PlanData(pw.blob, pw.score, creationIter, pw.iter, pw.type);
                 }
             }
+            
+            try {
+                byte[] raw = db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, k));
+                return raw != null ? PlanData.deserialize(raw) : null;
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to get plan data", e);
+            }
+        } finally {
+            lock.readLock().unlock();
         }
-        byte[] raw = planDataMap.get(key(personId, planId));
-        return raw != null ? PlanData.deserialize(raw) : null;
     }
 
     @Override
@@ -190,13 +234,16 @@ public final class MapDbPlanStore implements PlanStore {
         creationIterCache.putIfAbsent(k, iter);
         
         boolean shouldFlush;
-        synchronized (pendingWrites) {
+        lock.readLock().lock();
+        try {
             pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType));
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
                 activePlanCache.put(personId, planId);
             }
             shouldFlush = pendingWrites.size() >= WRITE_BUFFER_SIZE;
+        } finally {
+            lock.readLock().unlock();
         }
         
         if (shouldFlush) {
@@ -217,51 +264,50 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     private void flushPendingWrites() {
-        if (pendingWrites.isEmpty()) return;
+        List<PendingWrite> toFlush;
+        
+        lock.writeLock().lock();
+        try {
+            if (pendingWrites.isEmpty()) return;
+            toFlush = new ArrayList<>(pendingWrites);
+            pendingWrites.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
 
-        log.info("Flushing {} pending writes to MapDB...", pendingWrites.size());
+        log.info("Flushing {} pending writes to RocksDB...", toFlush.size());
         long start = System.currentTimeMillis();
 
-        int size = pendingWrites.size();
-        Map<String, byte[]> dataBatch = new HashMap<>(size);
-        Map<String, String> activeBatch = new HashMap<>(size / 4 + 1);
-        Set<String> affectedPersons = new HashSet<>(size / 2 + 1);
+        try (WriteBatch batch = new WriteBatch()) {
+            Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(toFlush.size());
+            Set<String> affectedPersons = new HashSet<>();
 
-        Map<String, PendingWrite> latestByKey = new LinkedHashMap<>(size);
-        for (PendingWrite pw : pendingWrites) {
-            latestByKey.put(pw.key, pw);
-            if (pw.makeSelected) {
-                activeBatch.put(pw.personId, pw.planId);
+            for (PendingWrite pw : toFlush) {
+                latestByKey.put(pw.key, pw);
+                if (pw.makeSelected) {
+                    batch.put(prefixedKey(ACTIVE_PLAN_PREFIX, pw.personId), pw.planId.getBytes());
+                }
+                affectedPersons.add(pw.personId);
             }
-            affectedPersons.add(pw.personId);
+
+            for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
+                PendingWrite pw = entry.getValue();
+                int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
+                byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
+                batch.put(prefixedKey(PLAN_DATA_PREFIX, pw.key), serialized);
+            }
+
+            for (String personId : affectedPersons) {
+                List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
+                batch.put(prefixedKey(PLAN_INDEX_PREFIX, personId), joinPlanIds(currentIds).getBytes());
+            }
+
+            db.write(writeOptions, batch);
+
+            log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to flush pending writes", e);
         }
-
-        for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
-            PendingWrite pw = entry.getValue();
-            int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
-            byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
-            dataBatch.put(pw.key, serialized);
-        }
-
-        planDataMap.putAll(dataBatch);
-        if (!activeBatch.isEmpty()) {
-            activePlanByPerson.putAll(activeBatch);
-        }
-
-        Map<String, String> indexBatch = new HashMap<>(affectedPersons.size());
-        for (String personId : affectedPersons) {
-            List<String> currentIds = planIdCache.getOrDefault(personId, new ArrayList<>());
-            indexBatch.put(personId, joinPlanIds(currentIds));
-        }
-        if (!indexBatch.isEmpty()) {
-            planIndexByPerson.putAll(indexBatch);
-        }
-
-        db.commit();
-
-        pendingWrites.clear();
-
-        log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
     }
 
     private int enforcePlanLimitLazy(String personId) {
@@ -305,9 +351,14 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     private List<String> loadPlanIds(String personId) {
-        String csv = planIndexByPerson.get(personId);
-        if (csv == null || csv.isEmpty()) return new ArrayList<>();
-        return new ArrayList<>(Arrays.asList(COMMA_PATTERN.split(csv)));
+        try {
+            byte[] csv = db.get(readOptions, prefixedKey(PLAN_INDEX_PREFIX, personId));
+            if (csv == null || csv.length == 0) return new ArrayList<>();
+            String csvStr = new String(csv);
+            return new ArrayList<>(Arrays.asList(COMMA_PATTERN.split(csvStr)));
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to load plan IDs", e);
+        }
     }
 
     @Override
@@ -316,7 +367,11 @@ public final class MapDbPlanStore implements PlanStore {
         PlanData existing = getPlanData(personId, planId);
         if (existing != null) {
             PlanData updated = new PlanData(existing.blob, score, existing.creationIter, iter, existing.type);
-            planDataMap.put(k, updated.serialize());
+            try {
+                db.put(writeOptions, prefixedKey(PLAN_DATA_PREFIX, k), updated.serialize());
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to update score", e);
+            }
             creationIterCache.put(k, existing.creationIter);
         }
     }
@@ -330,14 +385,22 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public boolean hasPlan(String personId, String planId) {
-        synchronized (pendingWrites) {
+        lock.readLock().lock();
+        try {
             for (PendingWrite pw : pendingWrites) {
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
                     return true;
                 }
             }
+            
+            try {
+                return db.get(readOptions, prefixedKey(PLAN_DATA_PREFIX, key(personId, planId))) != null;
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to check plan existence", e);
+            }
+        } finally {
+            lock.readLock().unlock();
         }
-        return planDataMap.containsKey(key(personId, planId));
     }
 
     @Override
@@ -346,29 +409,52 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     @Override
-    public synchronized void deletePlan(String personId, String planId) {
-        deletePlanInternal(personId, planId);
+    public void deletePlan(String personId, String planId) {
+        lock.writeLock().lock();
+        try {
+            deletePlanInternal(personId, planId);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     private void deletePlanInternal(String personId, String planId) {
         String k = key(personId, planId);
-        planDataMap.remove(k);
+        
+        try {
+            db.delete(writeOptions, prefixedKey(PLAN_DATA_PREFIX, k));
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to delete plan", e);
+        }
+        
         creationIterCache.remove(k);
 
         planIdCache.computeIfPresent(personId, (key, list) -> {
             List<String> newList = new ArrayList<>(list);
             newList.remove(planId);
             if (newList.isEmpty()) {
-                planIndexByPerson.remove(personId);
+                try {
+                    db.delete(writeOptions, prefixedKey(PLAN_INDEX_PREFIX, personId));
+                } catch (RocksDBException e) {
+                    throw new RuntimeException("Failed to delete plan index", e);
+                }
                 return null;
             }
-            planIndexByPerson.put(personId, joinPlanIds(newList));
+            try {
+                db.put(writeOptions, prefixedKey(PLAN_INDEX_PREFIX, personId), joinPlanIds(newList).getBytes());
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to update plan index", e);
+            }
             return newList;
         });
 
         if (planId.equals(activePlanCache.get(personId))) {
             activePlanCache.remove(personId);
-            activePlanByPerson.remove(personId);
+            try {
+                db.delete(writeOptions, prefixedKey(ACTIVE_PLAN_PREFIX, personId));
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Failed to delete active plan", e);
+            }
         }
         
         removePlanProxyFromPerson(personId, planId);
@@ -390,15 +476,38 @@ public final class MapDbPlanStore implements PlanStore {
 
     @Override
     public void commit() {
-        synchronized (pendingWrites) {
-            flushPendingWrites();
-        }
+        flushPendingWrites();
         enforceAllPlanLimits();
+        
+        try {
+            db.flush(new FlushOptions().setWaitForFlush(true));
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Failed to commit", e);
+        }
     }
 
     @Override
     public void close() {
         commit();
-        db.close();
+        
+        try {
+            if (db != null) {
+                db.syncWal();
+                db.cancelAllBackgroundWork(true);
+            }
+        } catch (RocksDBException e) {
+            log.warn("Error during background work cancellation", e);
+        }
+        
+        if (readOptions != null) readOptions.close();
+        if (writeOptions != null) writeOptions.close();
+        if (db != null) db.close();
+        
+        System.gc();
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

@@ -10,11 +10,18 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
 
     private static final String CACHE_ENTRIES = "cacheEntries";
     private static final String STORE_DIRECTORY = "storeDirectory";
+    private static final String STORAGE_BACKEND = "storageBackend";
 
     public static final String DB_FILE_NAME = "plans.mapdb";
 
+    public enum StorageBackend {
+        MAPDB,
+        ROCKSDB
+    }
+
     private int cacheEntries = 1000;
     private String storeDirectory = null;
+    private StorageBackend storageBackend = StorageBackend.MAPDB;
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -48,11 +55,30 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         this.storeDirectory = storeDirectory;
     }
 
+    @StringGetter(STORAGE_BACKEND)
+    public String getStorageBackendAsString() {
+        return storageBackend.name();
+    }
+
+    @StringSetter(STORAGE_BACKEND)
+    public void setStorageBackendFromString(String backend) {
+        this.storageBackend = StorageBackend.valueOf(backend.toUpperCase());
+    }
+
+    public StorageBackend getStorageBackend() {
+        return storageBackend;
+    }
+
+    public void setStorageBackend(StorageBackend storageBackend) {
+        this.storageBackend = storageBackend;
+    }
+
     @Override
     public Map<String, String> getComments() {
         Map<String, String> comments = super.getComments();
         comments.put(CACHE_ENTRIES, "Maximum number of cached plans in memory");
         comments.put(STORE_DIRECTORY, "Directory for the plan store. If null, uses system temp directory");
+        comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: MAPDB)");
         return comments;
     }
 }

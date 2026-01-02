@@ -85,14 +85,52 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ## Performance Optimizations
 
+### Write Performance Optimizations (Latest)
+
+The latest version includes several critical optimizations focused on **write performance**:
+
+1. **Elimination of DB Lookups During Flush (BIGGEST IMPROVEMENT)**
+   - Added `creationIterCache` to track creation iterations in memory
+   - **Before**: `planDataMap.get()` called for every plan during flush → thousands of slow DB accesses
+   - **After**: Direct cache lookup → zero DB accesses during flush
+   - **Impact**: Drastically reduces flush time, especially for large batches
+
+2. **Increased Write Buffer**
+   - Buffer size: 50,000 → 100,000 entries
+   - Fewer flush operations = better amortization of flush overhead
+   - Larger batches for MapDB's bulk write operations
+
+3. **Optimized Data Serialization**
+   - New `serializeDirect()` method with pre-allocated buffers
+   - Exact size calculation eliminates buffer resizing
+   - Avoids creating temporary `PlanData` objects during flush
+   - Reduced memory allocations and GC pressure
+
+4. **Pre-Computed Keys**
+   - Keys computed once in `PendingWrite` record
+   - Eliminates repeated string concatenation during flush
+   - Reduces CPU overhead and string allocations
+
+5. **Reduced Lock Contention**
+   - Flush operation moved outside synchronized block
+   - Cache updates use `putIfAbsent` instead of `containsKey + put`
+   - Minimized time in critical sections
+
+6. **Enhanced MapDB Configuration**
+   - Transaction support for consistent batch commits
+   - Moderate initial allocation: 256 MB (reasonable for most use cases)
+   - Moderate increment: 128 MB
+   - Reduces file fragmentation while avoiding excessive memory usage
+
 ### MapDB Layer
 
 - **Consolidated PlanData**: Single map instead of 7 separate maps
 - **Bulk writes**: Uses `putAll()` for batch operations
-- **Write buffering**: 50,000 entry buffer before flush
+- **Write buffering**: 100,000 entry buffer before flush (increased from 50,000)
 - **Compression**: `SerializerCompressionWrapper` for plan data
 - **Async writes**: `executorEnable()` for non-blocking persistence
 - **Memory-mapped files**: Fast file I/O
+- **Transaction commits**: Batch commits for consistency
 
 ### Proxy Layer
 
@@ -107,8 +145,35 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 <module name="offload">
     <param name="cacheEntries" value="2000" />
     <param name="storeDirectory" value="/path/to/store" />
+    <param name="storageBackend" value="MAPDB" />  <!-- or ROCKSDB -->
 </module>
 ```
+
+### Storage Backend Options
+
+**MapDB** (default):
+- Java-based embedded database
+- Good for moderate-sized simulations
+- Proven stability
+- Optimized with transaction batching
+
+**RocksDB**:
+- High-performance key-value store from Facebook
+- Better for large-scale simulations
+- Native C++ implementation with JNI bindings
+- LZ4 compression enabled
+- Optimized for write-heavy workloads
+- May offer better performance for very large datasets
+
+Choose RocksDB if:
+- You have millions of plans to store
+- Write performance is critical
+- You need the absolute best throughput
+
+Choose MapDB if:
+- You prefer pure Java solution
+- Your simulation is moderate-sized
+- You want simpler deployment (no native libraries)
 
 ## Usage Example
 
@@ -119,6 +184,7 @@ Config config = ConfigUtils.loadConfig("config.xml");
 OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
 offloadConfig.setStoreDirectory("planstore");
 offloadConfig.setCacheEntries(2000);
+offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);  // or MAPDB
 
 Controler controler = new Controler(scenario);
 controler.addOverridingModule(new OffloadModule());
