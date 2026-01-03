@@ -8,11 +8,30 @@ import org.matsim.core.controler.AbstractModule;
 /**
  * Module extension that adds streaming population loading capability.
  * 
- * <p>This module should be used in addition to {@link OffloadModule} when you want
- * to load a population from a file using streaming, which prevents all plans from
- * being loaded into memory at once.</p>
+ * <p><b>DEPRECATED:</b> The recommended approach is now to use {@link StreamingScenarioHelper#loadScenarioWithStreaming(Config)}
+ * which loads the population with streaming BEFORE the Controler is created. This ensures
+ * that at injection time, the scenario already contains persons with selected plans and
+ * the plan store already contains all plans.</p>
  * 
- * <p>Usage example:</p>
+ * <p>Recommended usage:</p>
+ * <pre>{@code
+ * Config config = ConfigUtils.loadConfig("config.xml");
+ * config.plans().setInputFile("population.xml.gz");
+ * 
+ * // Configure offload
+ * OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
+ * offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
+ * offloadConfig.setStoreDirectory("planstore");
+ * 
+ * // Load scenario with streaming - this loads all plans into store and selected plans into scenario
+ * Scenario scenario = StreamingScenarioHelper.loadScenarioWithStreaming(config);
+ * 
+ * Controler controler = new Controler(scenario);
+ * controler.addOverridingModule(new OffloadModule());
+ * controler.run();
+ * }</pre>
+ * 
+ * <p>This module can still be used for explicit population file specification:</p>
  * <pre>{@code
  * Config config = ConfigUtils.loadConfig("config.xml");
  * Scenario scenario = ScenarioUtils.createScenario(config);
