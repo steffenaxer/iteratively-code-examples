@@ -61,7 +61,7 @@ public class OffloadModuleExampleTest {
 
         controler.run();
 
-        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
+        File dbFile = new File(storeDir, OffloadConfigGroup.MAPDB_FILE_NAME);
         assertTrue(dbFile.exists(), "MapDB file should exist");
         assertTrue(dbFile.length() > 0, "MapDB file should contain data");
     }

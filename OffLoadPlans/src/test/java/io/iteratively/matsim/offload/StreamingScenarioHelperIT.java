@@ -107,16 +107,15 @@ public class StreamingScenarioHelperIT {
         // Configure offload
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
-        offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "store").toString());
-        offloadConfig.setCacheEntries(5);
         config.addModule(offloadConfig);
         
         config.replanning().setMaxAgentPlanMemorySize(5);
         config.controller().setFirstIteration(0);
+        config.controller().setOutputDirectory(utils.getOutputDirectory());
         
         // Load scenario with streaming - this should load all plans into store
         // and selected plans into scenario
-        Scenario scenario = StreamingScenarioHelper.loadScenarioWithStreaming(config);
+        Scenario scenario = OffloadSupport.loadScenarioWithStreaming(config);
         
         // Verify population was loaded
         assertEquals(5, scenario.getPopulation().getPersons().size(),
@@ -154,7 +153,7 @@ public class StreamingScenarioHelperIT {
         
         // Should throw exception when no population file is specified
         assertThrows(IllegalArgumentException.class, () -> {
-            StreamingScenarioHelper.loadScenarioWithStreaming(config);
+            OffloadSupport.loadScenarioWithStreaming(config);
         }, "Should throw exception when no population file is specified");
     }
 }

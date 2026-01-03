@@ -1,11 +1,20 @@
 package io.iteratively.matsim.offload;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
+import org.matsim.core.config.Config;
+import org.matsim.core.config.ConfigUtils;
+import org.matsim.core.scenario.ScenarioUtils;
 
+import java.io.File;
 import java.util.List;
 
 public final class OffloadSupport {
+    private static final Logger log = LogManager.getLogger(OffloadSupport.class);
+    
     private OffloadSupport() {}
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
@@ -180,5 +189,180 @@ public final class OffloadSupport {
         String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());
         plan.getAttributes().putAttribute("offloadPlanId", pid);
         return pid;
+    }
+    
+    /**
+     * Loads a scenario using streaming population loading.
+     * 
+     * <p>This method provides a simple and intuitive way to load large populations
+     * into MATSim without loading all plans into memory. It:</p>
+     * <ol>
+     *   <li>Saves the population file path from the config</li>
+     *   <li>Temporarily sets the population file to null</li>
+     *   <li>Loads the scenario (without population)</li>
+     *   <li>Creates a plan store in outputdir/planstore (or custom location)</li>
+     *   <li>Uses streaming to load all plans into the store</li>
+     *   <li>Loads all plans as proxies into the scenario</li>
+     *   <li>Ensures selected plans are materialized</li>
+     * </ol>
+     * 
+     * <p>After this method returns, the scenario is ready with:</p>
+     * <ul>
+     *   <li>Persons with all plans as proxies in memory</li>
+     *   <li>Selected plans materialized</li>
+     *   <li>All plans stored in the plan store</li>
+     * </ul>
+     * 
+     * <p>Usage example:</p>
+     * <pre>{@code
+     * Config config = ConfigUtils.loadConfig("config.xml");
+     * config.plans().setInputFile("population.xml.gz");
+     * config.controller().setOutputDirectory("output");
+     * 
+     * // Optional: configure offload settings
+     * OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
+     * offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
+     * // If not specified, plan store will be created in output/planstore
+     * 
+     * Scenario scenario = OffloadSupport.loadScenarioWithStreaming(config);
+     * 
+     * Controler controler = new Controler(scenario);
+     * controler.addOverridingModule(new OffloadModule());
+     * controler.run();
+     * }</pre>
+     * 
+     * @param config the MATSim config with population file specified
+     * @return a scenario with streaming-loaded population
+     * @throws IllegalArgumentException if no population file is specified
+     */
+    public static Scenario loadScenarioWithStreaming(Config config) {
+        // Get the population file path and make it absolute
+        String populationFile = config.plans().getInputFile();
+        
+        if (populationFile == null || populationFile.isEmpty()) {
+            throw new IllegalArgumentException(
+                "No population file specified in config. " +
+                "Please set config.plans().setInputFile(...) before calling this method.");
+        }
+        
+        // Resolve to absolute path if it's relative (MATSim context is needed)
+        String absolutePopulationFile;
+        if (new File(populationFile).isAbsolute()) {
+            absolutePopulationFile = populationFile;
+        } else {
+            // Get the context from config if available
+            String context = config.getContext() != null ? config.getContext().toString() : null;
+            if (context != null) {
+                try {
+                    absolutePopulationFile = org.matsim.core.utils.io.IOUtils.extendUrl(
+                        new java.net.URL(context), populationFile).toString();
+                } catch (Exception e) {
+                    // If URL construction fails, try as file
+                    File contextFile = new File(context).getParentFile();
+                    absolutePopulationFile = new File(contextFile, populationFile).getAbsolutePath();
+                }
+            } else {
+                // No context, use as is and hope it works
+                absolutePopulationFile = new File(populationFile).getAbsolutePath();
+            }
+        }
+        
+        log.info("Loading scenario with streaming population loading from: {}", absolutePopulationFile);
+        
+        // Temporarily set to null to prevent loading during scenario creation
+        config.plans().setInputFile(null);
+        
+        // Load scenario without population
+        Scenario scenario = ScenarioUtils.loadScenario(config);
+        
+        // Get offload configuration
+        OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
+        int maxPlans = config.replanning().getMaxAgentPlanMemorySize();
+        
+        // Determine plan store directory
+        File baseDir = determineStoreDirectory(config, offloadConfig);
+        baseDir.mkdirs();
+        
+        // Create plan store
+        PlanStore planStore = createPlanStore(offloadConfig.getStorageBackend(), baseDir, scenario, maxPlans);
+        
+        // Create plan cache
+        PlanCache planCache = new PlanCache(planStore, offloadConfig.getCacheEntries());
+        
+        try {
+            // Use streaming loader to load population into store
+            log.info("Streaming population from file...");
+            StreamingPopulationLoader loader = new StreamingPopulationLoader(
+                planStore, 
+                scenario, 
+                config.controller().getFirstIteration()
+            );
+            loader.loadFromFile(absolutePopulationFile);
+            
+            log.info("Loading plans as proxies into scenario...");
+            // Load all plans as proxies into the scenario
+            scenario.getPopulation().getPersons().values().forEach(person -> {
+                loadAllPlansAsProxies(person, planStore);
+            });
+            
+            log.info("Materializing selected plans...");
+            // Ensure selected plans are materialized
+            scenario.getPopulation().getPersons().values().forEach(person -> {
+                ensureSelectedMaterialized(person, planStore, planCache);
+            });
+            
+            planStore.commit();
+            
+            log.info("Scenario loaded with streaming. {} persons with plans in memory and store.",
+                scenario.getPopulation().getPersons().size());
+            
+            // Restore the population file path in config for other components that might need it
+            config.plans().setInputFile(populationFile);
+            
+        } catch (Exception e) {
+            // Close plan store if something goes wrong
+            planStore.close();
+            throw new RuntimeException("Failed to load scenario with streaming", e);
+        }
+        
+        return scenario;
+    }
+    
+    /**
+     * Determines the store directory based on configuration.
+     * If not explicitly set, uses outputDirectory/planstore.
+     */
+    private static File determineStoreDirectory(Config config, OffloadConfigGroup offloadConfig) {
+        if (offloadConfig.getStoreDirectory() != null) {
+            return new File(offloadConfig.getStoreDirectory());
+        }
+        
+        // Default: use output directory with planstore subfolder
+        String outputDir = config.controller().getOutputDirectory();
+        if (outputDir != null && !outputDir.isEmpty()) {
+            return new File(outputDir, "planstore");
+        }
+        
+        // Fallback: use temp directory
+        return new File(System.getProperty("java.io.tmpdir"),
+                "matsim-offload-" + System.currentTimeMillis());
+    }
+    
+    /**
+     * Creates a plan store with unified naming conventions.
+     */
+    private static PlanStore createPlanStore(OffloadConfigGroup.StorageBackend backend, 
+                                             File baseDir, Scenario scenario, int maxPlans) {
+        return switch (backend) {
+            case MAPDB -> {
+                File dbFile = new File(baseDir, OffloadConfigGroup.MAPDB_FILE_NAME);
+                yield new MapDbPlanStore(dbFile, scenario, maxPlans);
+            }
+            case ROCKSDB -> {
+                File rocksDir = new File(baseDir, OffloadConfigGroup.ROCKSDB_DIR_NAME);
+                rocksDir.mkdirs();
+                yield new RocksDbPlanStore(rocksDir, scenario, maxPlans);
+            }
+        };
     }
 }

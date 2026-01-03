@@ -12,7 +12,8 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private static final String STORE_DIRECTORY = "storeDirectory";
     private static final String STORAGE_BACKEND = "storageBackend";
 
-    public static final String DB_FILE_NAME = "plans.mapdb";
+    public static final String MAPDB_FILE_NAME = "plans.mapdb";
+    public static final String ROCKSDB_DIR_NAME = "plans_rocksdb";
 
     public enum StorageBackend {
         MAPDB,
