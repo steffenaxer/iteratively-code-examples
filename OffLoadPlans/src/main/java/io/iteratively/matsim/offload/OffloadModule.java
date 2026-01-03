@@ -21,7 +21,6 @@ public final class OffloadModule extends AbstractModule {
     public void install() {
         addControllerListenerBinding().to(OffloadIterationHooks.class);
         addControllerListenerBinding().to(PlanStoreShutdownListener.class).in(Singleton.class);
-        bindPlanSelectorForRemoval().toProvider(OffloadPlanSelectorProvider.class).in(Singleton.class);
     }
 
     @Provides
@@ -70,34 +69,5 @@ public final class OffloadModule extends AbstractModule {
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(
                 scenario.getConfig(), OffloadConfigGroup.class);
         return new PlanCache(store, offloadConfig.getCacheEntries());
-    }
-
-    static class OffloadPlanSelectorProvider implements Provider<PlanSelector<Plan, Person>> {
-        @Inject Scenario scenario;
-        @Inject PlanStore store;
-        @Inject MatsimServices matsimServices;
-
-        @Override
-        public PlanSelector<Plan, Person> get() {
-            // Hole den konfigurierten Selector-Namen und erstelle die MATSim-Standard-Instanz
-            String selectorName = scenario.getConfig().replanning().getPlanSelectorForRemoval();
-            PlanSelector<Plan, Person> delegate = createDelegateSelector(selectorName);
-
-            return (member) -> {
-                int currentIteration = matsimServices.getIterationNumber();
-                LazyOffloadPlanSelector selector = new LazyOffloadPlanSelector(delegate, store, currentIteration);
-                return selector.selectPlan(member);
-            };
-        }
-
-        private PlanSelector<Plan, Person> createDelegateSelector(String name) {
-            return switch (name) {
-                case "RandomPlanSelector" -> new RandomPlanSelector<>();
-                case "BestPlanSelector" -> new BestPlanSelector<>();
-                case "ExpBetaPlanSelector" -> new ExpBetaPlanSelector<>(scenario.getConfig().scoring());
-                case "WorstPlanSelector" -> new GenericWorstPlanForRemovalSelector<>();
-                default -> new GenericWorstPlanForRemovalSelector<>();
-            };
-        }
     }
 }
