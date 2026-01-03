@@ -66,7 +66,7 @@ public class OffloadModuleExample {
         controler.run();
 
         System.out.println("\nSimulation completed!");
-        System.out.println("Plan store location: " + new File(storeDir, OffloadConfigGroup.DB_FILE_NAME));
+        System.out.println("Plan store location: " + new File(storeDir, OffloadConfigGroup.MAPDB_FILE_NAME));
         
         // The MapDB file now contains all plans from all iterations
         // During simulation, all plans were kept as lightweight proxies with:
