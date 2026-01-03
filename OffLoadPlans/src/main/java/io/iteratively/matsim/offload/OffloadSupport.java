@@ -320,9 +320,11 @@ public final class OffloadSupport {
             config.plans().setInputFile(populationFile);
             
         } catch (Exception e) {
-            // Close plan store if something goes wrong
-            planStore.close();
             throw new RuntimeException("Failed to load scenario with streaming", e);
+        } finally {
+            // Always close the plan store created for streaming
+            // A new instance will be created by OffloadModule during injection
+            planStore.close();
         }
         
         return scenario;
