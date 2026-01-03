@@ -100,8 +100,8 @@ public class StreamingPopulationLoader {
             Person scenarioPerson = targetScenario.getPopulation().getFactory().createPerson(person.getId());
             
             // Copy person attributes
-            person.getAttributes().getAsMap().forEach((key, value) -> 
-                scenarioPerson.getAttributes().putAttribute(key, value));
+            person.getAttributes().getAsMap().forEach(((key,o) ->
+                scenarioPerson.getAttributes().putAttribute(key, o)));
             
             targetScenario.getPopulation().addPerson(scenarioPerson);
         }
