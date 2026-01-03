@@ -3,10 +3,12 @@ package io.iteratively.matsim.offload;
 import com.google.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.events.PersonScoreEvent;
 import org.matsim.api.core.v01.events.handler.PersonScoreEventHandler;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
+import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.controler.events.AfterMobsimEvent;
 import org.matsim.core.controler.events.BeforeMobsimEvent;
 import org.matsim.core.controler.events.ReplanningEvent;
@@ -26,44 +28,45 @@ public final class ActiveDematerializationListener implements
     
     private static final Logger log = LogManager.getLogger(ActiveDematerializationListener.class);
     
-    private final OffloadConfigGroup config;
+    private final Scenario scenario;
     
     @Inject
-    public ActiveDematerializationListener(OffloadConfigGroup config) {
-        this.config = config;
+    public ActiveDematerializationListener(Scenario scenario) {
+        this.scenario = scenario;
+    }
+    
+    private OffloadConfigGroup getConfig() {
+        return ConfigUtils.addOrGetModule(scenario.getConfig(), OffloadConfigGroup.class);
     }
     
     @Override
     public void notifyBeforeMobsim(BeforeMobsimEvent event) {
-        if (!config.isEnableAutodematerialization()) {
+        if (!getConfig().isEnableAutodematerialization()) {
             return;
         }
         
-        // Before mobsim: ensure only selected plans are materialized
-        dematerializeAllNonSelected(event, "before mobsim");
+        // Before mobsim: dematerialize old non-selected plans based on max lifetime
+        dematerializeOldNonSelected(event, "before mobsim");
     }
     
     @Override
     public void notifyAfterMobsim(AfterMobsimEvent event) {
-        if (!config.isEnableAutodematerialization()) {
+        if (!getConfig().isEnableAutodematerialization()) {
             return;
         }
         
-        // After mobsim: dematerialize all non-selected plans
-        // (selected plans may have been modified during simulation)
-        dematerializeAllNonSelected(event, "after mobsim");
+        // After mobsim: dematerialize old non-selected plans
+        dematerializeOldNonSelected(event, "after mobsim");
     }
     
     @Override
     public void notifyReplanning(ReplanningEvent event) {
-        if (!config.isEnableAutodematerialization()) {
+        if (!getConfig().isEnableAutodematerialization()) {
             return;
         }
         
-        // After replanning: dematerialize all non-selected plans
-        // During replanning, some plans may have been temporarily materialized
-        // for plan selection or mutation
-        dematerializeAllNonSelected(event, "after replanning");
+        // After replanning: dematerialize old non-selected plans
+        dematerializeOldNonSelected(event, "after replanning");
     }
     
     @Override
@@ -73,9 +76,10 @@ public final class ActiveDematerializationListener implements
         // and could impact performance. The other hooks are sufficient.
     }
     
-    private void dematerializeAllNonSelected(Object event, String phase) {
+    private void dematerializeOldNonSelected(Object event, String phase) {
         int iteration = -1;
         var population = getPopulationFromEvent(event);
+        long maxLifetimeMs = getConfig().getMaxNonSelectedMaterializationTimeMs();
         
         if (event instanceof BeforeMobsimEvent e) {
             iteration = e.getIteration();
@@ -87,6 +91,7 @@ public final class ActiveDematerializationListener implements
         
         int dematerialized = 0;
         int totalNonSelectedMaterialized = 0;
+        long maxDuration = 0;
         
         for (Person person : population.getPersons().values()) {
             Plan selectedPlan = person.getSelectedPlan();
@@ -95,22 +100,33 @@ public final class ActiveDematerializationListener implements
                 if (plan != selectedPlan && plan instanceof PlanProxy proxy) {
                     if (proxy.isMaterialized()) {
                         totalNonSelectedMaterialized++;
-                        proxy.dematerialize();
-                        dematerialized++;
+                        long duration = proxy.getMaterializationDurationMs();
+                        maxDuration = Math.max(maxDuration, duration);
+                        
+                        // Dematerialize if exceeds max lifetime
+                        if (duration > maxLifetimeMs) {
+                            proxy.dematerialize();
+                            dematerialized++;
+                        }
                     }
                 }
             }
         }
         
-        if (dematerialized > 0 && config.isLogMaterializationStats()) {
-            log.info("Iteration {}, {}: Dematerialized {} non-selected plans (found {} materialized)", 
-                    iteration, phase, dematerialized, totalNonSelectedMaterialized);
+        if (dematerialized > 0 && getConfig().isLogMaterializationStats()) {
+            log.info("Iteration {}, {}: Dematerialized {} non-selected plans older than {}ms " +
+                    "(found {} materialized, max age: {}ms)", 
+                    iteration, phase, dematerialized, maxLifetimeMs, 
+                    totalNonSelectedMaterialized, maxDuration);
+        } else if (totalNonSelectedMaterialized > 0 && getConfig().isLogMaterializationStats()) {
+            log.debug("Iteration {}, {}: {} non-selected plans materialized (max age: {}ms, threshold: {}ms)",
+                    iteration, phase, totalNonSelectedMaterialized, maxDuration, maxLifetimeMs);
         }
         
-        // Log statistics if enabled
-        if (config.isLogMaterializationStats() && totalNonSelectedMaterialized > 0) {
+        // Log statistics if enabled and plans were dematerialized
+        if (getConfig().isLogMaterializationStats() && dematerialized > 0) {
             PlanMaterializationMonitor.logStats(population, 
-                    String.format("iteration %d, %s (after auto-dematerialization)", iteration, phase));
+                    String.format("iteration %d, %s (after time-based dematerialization)", iteration, phase));
         }
     }
     

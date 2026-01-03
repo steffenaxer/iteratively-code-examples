@@ -2,23 +2,26 @@
 
 ## Overview
 
-This module implements memory-efficient plan offloading for MATSim simulations using MapDB persistence and a PlanProxy architecture. The key innovation is keeping ALL plans in memory as lightweight proxies (with scores only), enabling proper plan selection algorithms like ChangeExpBeta while minimizing memory usage.
+This module implements memory-efficient plan offloading for MATSim simulations using MapDB/RocksDB persistence and a PlanProxy architecture. The key innovation is keeping ALL plans in memory as lightweight proxies (with scores only), enabling proper plan selection algorithms like ChangeExpBeta while minimizing memory usage.
 
 ## Architecture
 
 ### Core Components
 
 1. **PlanProxy** - Lightweight plan wrapper that holds only metadata (score, type, creation iteration)
-2. **MapDbPlanStore** - Persistent storage for plan data using MapDB
+2. **MapDbPlanStore / RocksDbPlanStore** - Persistent storage for plan data
 3. **OffloadSupport** - Helper methods for proxy lifecycle management
 4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle
+5. **ActiveDematerializationListener** - Agile dematerialization of non-selected plans
+6. **PlanMaterializationMonitor** - Monitoring and statistics for materialized plans
 
 ### Key Design Principles
 
 - **All plans as proxies**: Every plan is kept in memory as a `PlanProxy` object
 - **Lazy materialization**: Full plan data is loaded only when accessing plan elements
-- **Automatic dematerialization**: After persistence, materialized plans are dropped to save memory
+- **Agile dematerialization**: Non-selected plans are actively dematerialized throughout the iteration
 - **Score-based selection**: Plan selectors can work with all plans' scores without materialization
+- **Time tracking**: Track how long plans remain materialized for debugging
 
 ## Workflow
 
@@ -30,6 +33,9 @@ OffloadSupport.loadAllPlansAsProxies(person, store);
 
 // 2. Materialize selected plan for simulation
 OffloadSupport.ensureSelectedMaterialized(person, store, cache);
+
+// 3. Dematerialize non-selected plans (if auto-dematerialization enabled)
+ActiveDematerializationListener.dematerializeAllNonSelected();
 ```
 
 ### During Replanning
@@ -49,7 +55,37 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 // This happens automatically inside persistAllMaterialized
 ```
 
-## Key Methods
+## Agile Dematerialization Strategy
+
+The module implements a time-based dematerialization approach that limits how long non-selected plans can remain materialized:
+
+### Time-Based Cleanup
+
+Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 5000ms = 5 seconds):
+
+1. **Before Mobsim**: Checks and dematerializes old non-selected plans
+2. **After Mobsim**: Checks and dematerializes old non-selected plans  
+3. **After Replanning**: Checks and dematerializes old non-selected plans
+4. **Iteration Start/End**: Additional cleanup at iteration boundaries
+
+### How It Works
+
+- Each `PlanProxy` tracks its materialization timestamp
+- At each checkpoint, non-selected plans are checked
+- Plans materialized longer than `maxNonSelectedMaterializationTimeMs` are automatically dematerialized
+- Selected plans are never subject to automatic dematerialization
+- This ensures non-selected plans don't linger in memory unnecessarily
+
+### Example Timeline
+
+```
+t=0ms:    Plan A (non-selected) is materialized for plan selection
+t=1000ms: BeforeMobsim check - Plan A age=1000ms < 5000ms threshold → kept
+t=3000ms: AfterMobsim check - Plan A age=3000ms < 5000ms threshold → kept  
+t=6000ms: AfterReplanning check - Plan A age=6000ms > 5000ms threshold → dematerialized!
+```
+
+## Key Classes and Methods
 
 ### OffloadSupport
 
@@ -82,6 +118,37 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 - **`dematerialize()`**
   - Drops materialized plan to save memory
   - Keeps proxy with score intact
+
+- **`getMaterializationTimestamp()` / `getMaterializationDurationMs()`**
+  - Track when plan was materialized and for how long
+
+### PlanMaterializationMonitor
+
+- **`collectStats(Population)`**
+  - Collects comprehensive statistics about materialized plans
+  - Returns total plans, materialized plans, selected vs non-selected
+  - Includes materialization duration statistics
+
+- **`logStats(Population, String)`**
+  - Logs materialization statistics for debugging
+  - Useful for understanding memory usage patterns
+
+- **`dematerializeNonSelected(Person)`**
+  - Dematerializes all non-selected plans for a person
+  
+- **`dematerializeAllNonSelected(Population)`**
+  - Dematerializes non-selected plans across entire population
+
+- **`dematerializeOldNonSelected(Person, long)`**
+  - Time-based dematerialization for plans older than threshold
+
+### ActiveDematerializationListener
+
+Automatically registered listener that:
+- Implements `BeforeMobsimListener`, `AfterMobsimListener`, `ReplanningListener`
+- Actively dematerializes non-selected plans at multiple points during iteration
+- Respects the `enableAutodematerialization` configuration flag
+- Logs statistics if `logMaterializationStats` is enabled
 
 ## Performance Optimizations
 
@@ -145,25 +212,68 @@ The latest version includes several critical optimizations focused on **write pe
 <module name="offload">
     <param name="cacheEntries" value="2000" />
     <param name="storeDirectory" value="/path/to/store" />
-    <param name="storageBackend" value="MAPDB" />  <!-- or ROCKSDB -->
+    <param name="storageBackend" value="ROCKSDB" />  <!-- or MAPDB -->
+    <param name="enableAutodematerialization" value="true" />
+    <param name="logMaterializationStats" value="true" />
 </module>
 ```
 
+### Configuration Parameters
+
+**cacheEntries** (default: 1000)
+- Maximum number of cached plans in memory
+- Higher values improve performance but use more memory
+
+**storeDirectory** (default: null)
+- Directory for the plan store
+- If null, uses `outputDirectory/planstore` or system temp directory
+
+**storageBackend** (default: ROCKSDB)
+- Storage backend: `MAPDB` or `ROCKSDB`
+- See "Storage Backend Options" below
+
+**enableAutodematerialization** (default: true)
+- Automatically dematerializes non-selected plans to save memory
+- When enabled, non-selected plans exceeding `maxNonSelectedMaterializationTimeMs` are dematerialized at:
+  - Before mobsim
+  - After mobsim
+  - After replanning
+  - Iteration start/end
+- Ensures non-selected plans don't remain materialized longer than configured lifetime
+
+**maxNonSelectedMaterializationTimeMs** (default: 5000)
+- Maximum time in milliseconds a non-selected plan can remain materialized
+- Default is 5000ms (5 seconds)
+- Lower values = more aggressive cleanup, less memory but more I/O
+- Higher values = less aggressive cleanup, more memory but less I/O
+- Set to `0` to dematerialize immediately (most aggressive)
+- Set to `Long.MAX_VALUE` to effectively disable time-based cleanup
+
+**logMaterializationStats** (default: true)
+- Logs statistics about materialized plans for debugging
+- Includes:
+  - Total plans vs materialized plans
+  - Selected vs non-selected materialized plans
+  - Materialization duration (max and average)
+  - Distribution of materialized plans per person
+  - Number of plans dematerialized due to age
+- Useful for understanding memory usage patterns and tuning `maxNonSelectedMaterializationTimeMs`
+
 ### Storage Backend Options
 
-**MapDB** (default):
-- Java-based embedded database
-- Good for moderate-sized simulations
-- Proven stability
-- Optimized with transaction batching
-
-**RocksDB**:
+**RocksDB** (default):
 - High-performance key-value store from Facebook
 - Better for large-scale simulations
 - Native C++ implementation with JNI bindings
 - LZ4 compression enabled
 - Optimized for write-heavy workloads
 - May offer better performance for very large datasets
+
+**MapDB**:
+- Java-based embedded database
+- Good for moderate-sized simulations
+- Proven stability
+- Optimized with transaction batching
 
 Choose RocksDB if:
 - You have millions of plans to store
@@ -186,9 +296,50 @@ offloadConfig.setStoreDirectory("planstore");
 offloadConfig.setCacheEntries(2000);
 offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);  // or MAPDB
 
+// Enable time-based dematerialization (default: true)
+offloadConfig.setEnableAutodematerialization(true);
+
+// Set maximum lifetime for non-selected materialized plans (default: 5000ms)
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(5000); // 5 seconds
+
+// Enable materialization monitoring (default: true)
+offloadConfig.setLogMaterializationStats(true);
+
 Controler controler = new Controler(scenario);
 controler.addOverridingModule(new OffloadModule());
 controler.run();
+```
+
+### Tuning the Maximum Lifetime
+
+The `maxNonSelectedMaterializationTimeMs` parameter controls the tradeoff between memory usage and I/O:
+
+```java
+// Aggressive cleanup - minimal memory, more I/O
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(1000); // 1 second
+
+// Balanced (default) - good for most use cases  
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(5000); // 5 seconds
+
+// Relaxed - allows plans to stay materialized longer
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(30000); // 30 seconds
+
+// Immediate cleanup - dematerialize as soon as possible
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(0); // immediate
+```
+
+### Monitoring Output Example
+
+When `logMaterializationStats` is enabled, you'll see output like:
+
+```
+INFO  ActiveDematerializationListener - Iteration 1, before mobsim: Dematerialized 25 non-selected plans 
+      older than 5000ms (found 150 materialized, max age: 8234ms)
+
+INFO  PlanMaterializationMonitor - Plan materialization stats at iteration 1, before mobsim 
+      (after time-based dematerialization): MaterializationStats{totalPersons=10000, totalPlans=50000, 
+      materializedPlans=10125, selectedMaterialized=10000, nonSelectedMaterialized=125, 
+      maxDuration=4891ms, avgDuration=2134.5ms, distribution={1 materialized=10000, 2 materialized=125}}
 ```
 
 ## Memory Benefits
@@ -198,8 +349,9 @@ For a simulation with 10,000 agents and 5 plans each:
 - **Without offloading**: ~50,000 full plans in memory (~500MB+)
 - **With offloading (old approach)**: Only selected plans (~10,000 plans, ~100MB)
   - **Problem**: Plan selectors can't see alternatives
-- **With PlanProxy**: All plans as proxies (~50,000 proxies, ~5MB) + selected materialized (~10,000 plans, ~100MB)
+- **With PlanProxy + Agile Dematerialization**: All plans as proxies (~50,000 proxies, ~5MB) + selected materialized (~10,000 plans, ~100MB)
   - **Total**: ~105MB with full selector functionality
+  - **Key advantage**: Non-selected plans are automatically dematerialized, ensuring minimal memory overhead
 
 ## Integration with Plan Selectors
 
@@ -233,16 +385,38 @@ Key test classes:
 - `PlanProxyTest` - Tests proxy lifecycle and lazy loading
 - `OffloadModuleIT` - Integration test with full MATSim simulation
 - `OffloadModuleExampleTest` - Validates that at most 1 plan is materialized per person at runtime
+- `PlanMaterializationMonitorTest` - Tests monitoring, statistics, and agile dematerialization
 - `FuryRoundtripTest` - Serialization round-trip tests
 
 ### Materialization Constraint Validation
 
-The `OffloadModuleExampleTest` includes comprehensive validation that ensures:
-- **At iteration start**: At most 1 plan is materialized per person (the selected plan)
-- **At iteration end**: 0 plans are materialized (all are dematerialized)
-- **During simulation**: Memory footprint is minimal while maintaining full selector functionality
+The agile dematerialization approach ensures:
+- **Before Mobsim**: Only selected plans are materialized
+- **After Mobsim**: Non-selected plans are immediately dematerialized
+- **After Replanning**: Temporary materializations during plan selection are cleaned up
+- **Iteration End**: All non-selected plans are dematerialized
 
-This validates the core promise of the PlanProxy architecture: keeping all plan scores in memory for proper selection while materializing at most 1 plan per person at any given time.
+This validates the core promise: keeping all plan scores in memory for proper selection while ensuring non-selected plans don't remain materialized longer than necessary.
+
+### Debugging Materialization Issues
+
+If you see warnings about non-selected materialized plans:
+
+1. **Check configuration**: Ensure `enableAutodematerialization=true`
+2. **Review logs**: Check materialization statistics to identify patterns
+3. **Inspect durations**: Look at `maxDuration` and `avgDuration` in stats
+4. **Custom dematerialization**: Use `PlanMaterializationMonitor.dematerializeOldNonSelected()` with custom time thresholds
+
+Example of programmatic monitoring:
+```java
+// Get current statistics
+MaterializationStats stats = PlanMaterializationMonitor.collectStats(population);
+System.out.println("Materialized: " + stats.materializedPlans());
+System.out.println("Non-selected: " + stats.nonSelectedMaterializedPlans());
+
+// Dematerialize plans older than 5 seconds
+int dematerialized = PlanMaterializationMonitor.dematerializeAllOldNonSelected(population, 5000);
+```
 
 ## Technical Details
 

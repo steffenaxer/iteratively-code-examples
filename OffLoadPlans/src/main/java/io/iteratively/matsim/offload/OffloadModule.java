@@ -72,10 +72,4 @@ public final class OffloadModule extends AbstractModule {
                 scenario.getConfig(), OffloadConfigGroup.class);
         return new PlanCache(store, offloadConfig.getCacheEntries());
     }
-
-    @Provides
-    @Singleton
-    OffloadConfigGroup provideOffloadConfig(Scenario scenario) {
-        return ConfigUtils.addOrGetModule(scenario.getConfig(), OffloadConfigGroup.class);
-    }
 }

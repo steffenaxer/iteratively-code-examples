@@ -3,6 +3,7 @@ package io.iteratively.matsim.offload;
 import com.google.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.controler.events.IterationEndsEvent;
@@ -15,13 +16,17 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
 
     private final PlanStore store;
     private final PlanCache cache;
-    private final OffloadConfigGroup config;
+    private final Scenario scenario;
 
     @Inject
-    public OffloadIterationHooks(PlanStore store, PlanCache cache, OffloadConfigGroup config) {
+    public OffloadIterationHooks(PlanStore store, PlanCache cache, Scenario scenario) {
         this.store = store;
         this.cache = cache;
-        this.config = config;
+        this.scenario = scenario;
+    }
+
+    private OffloadConfigGroup getConfig() {
+        return ConfigUtils.addOrGetModule(scenario.getConfig(), OffloadConfigGroup.class);
     }
 
     @Override
@@ -49,13 +54,18 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
             OffloadSupport.ensureSelectedMaterialized(p, store, cache);
         }
 
-        // Auto-dematerialize non-selected plans if enabled
-        if (config.isEnableAutodematerialization()) {
-            PlanMaterializationMonitor.dematerializeAllNonSelected(pop);
+        // Auto-dematerialize old non-selected plans if enabled
+        if (getConfig().isEnableAutodematerialization()) {
+            long maxLifetimeMs = getConfig().getMaxNonSelectedMaterializationTimeMs();
+            int dematerialized = PlanMaterializationMonitor.dematerializeAllOldNonSelected(pop, maxLifetimeMs);
+            if (dematerialized > 0 && getConfig().isLogMaterializationStats()) {
+                log.info("Iteration {}: Dematerialized {} non-selected plans older than {}ms at iteration start",
+                        iter, dematerialized, maxLifetimeMs);
+            }
         }
 
         // Log materialization statistics if enabled
-        if (config.isLogMaterializationStats()) {
+        if (getConfig().isLogMaterializationStats()) {
             PlanMaterializationMonitor.logStats(pop, "iteration " + iter + " start");
         }
 
@@ -76,13 +86,18 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
         store.commit();
         cache.evictAll();
 
-        // Auto-dematerialize non-selected plans if enabled
-        if (config.isEnableAutodematerialization()) {
-            PlanMaterializationMonitor.dematerializeAllNonSelected(pop);
+        // Auto-dematerialize old non-selected plans if enabled
+        if (getConfig().isEnableAutodematerialization()) {
+            long maxLifetimeMs = getConfig().getMaxNonSelectedMaterializationTimeMs();
+            int dematerialized = PlanMaterializationMonitor.dematerializeAllOldNonSelected(pop, maxLifetimeMs);
+            if (dematerialized > 0 && getConfig().isLogMaterializationStats()) {
+                log.info("Iteration {}: Dematerialized {} non-selected plans older than {}ms at iteration end",
+                        iter, dematerialized, maxLifetimeMs);
+            }
         }
 
         // Log materialization statistics if enabled
-        if (config.isLogMaterializationStats()) {
+        if (getConfig().isLogMaterializationStats()) {
             PlanMaterializationMonitor.logStats(pop, "iteration " + iter + " end");
         }
 

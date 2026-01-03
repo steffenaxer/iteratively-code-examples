@@ -13,6 +13,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private static final String STORAGE_BACKEND = "storageBackend";
     private static final String ENABLE_AUTODEMATERIALIZATION = "enableAutodematerialization";
     private static final String LOG_MATERIALIZATION_STATS = "logMaterializationStats";
+    private static final String MAX_NON_SELECTED_MATERIALIZATION_TIME_MS = "maxNonSelectedMaterializationTimeMs";
 
     public static final String MAPDB_FILE_NAME = "plans.mapdb";
     public static final String ROCKSDB_DIR_NAME = "plans_rocksdb";
@@ -27,6 +28,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private StorageBackend storageBackend = StorageBackend.ROCKSDB;
     private boolean enableAutodematerialization = true;
     private boolean logMaterializationStats = true;
+    private long maxNonSelectedMaterializationTimeMs = 5000; // 5 seconds default
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -114,6 +116,24 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         this.logMaterializationStats = logMaterializationStats;
     }
 
+    @StringGetter(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS)
+    public String getMaxNonSelectedMaterializationTimeMsAsString() {
+        return String.valueOf(maxNonSelectedMaterializationTimeMs);
+    }
+
+    @StringSetter(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS)
+    public void setMaxNonSelectedMaterializationTimeMsFromString(String timeMs) {
+        this.maxNonSelectedMaterializationTimeMs = Long.parseLong(timeMs);
+    }
+
+    public long getMaxNonSelectedMaterializationTimeMs() {
+        return maxNonSelectedMaterializationTimeMs;
+    }
+
+    public void setMaxNonSelectedMaterializationTimeMs(long maxNonSelectedMaterializationTimeMs) {
+        this.maxNonSelectedMaterializationTimeMs = maxNonSelectedMaterializationTimeMs;
+    }
+
     @Override
     public Map<String, String> getComments() {
         Map<String, String> comments = super.getComments();
@@ -122,6 +142,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: ROCKSDB)");
         comments.put(ENABLE_AUTODEMATERIALIZATION, "Automatically dematerialize non-selected plans to save memory (default: true)");
         comments.put(LOG_MATERIALIZATION_STATS, "Log statistics about materialized plans for debugging (default: true)");
+        comments.put(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS, "Maximum time in milliseconds a non-selected plan can remain materialized (default: 5000ms = 5 seconds)");
         return comments;
     }
 }
