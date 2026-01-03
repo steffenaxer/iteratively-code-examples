@@ -22,7 +22,6 @@ public final class OffloadModule extends AbstractModule {
         addControllerListenerBinding().to(OffloadIterationHooks.class);
         addControllerListenerBinding().to(PlanStoreShutdownListener.class).in(Singleton.class);
         addControllerListenerBinding().to(PlanMaterializationWatchdog.class);
-        addControllerListenerBinding().to(ReplanningConversionListener.class);
     }
 
     @Provides

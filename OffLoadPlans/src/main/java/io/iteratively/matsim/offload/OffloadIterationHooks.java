@@ -42,6 +42,28 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
             }
             store.commit();
             log.info("Iteration 0: Initial plans persisted");
+        } else {
+            // For iterations > 0: First persist and convert any new regular plans created during replanning
+            log.debug("Iteration {}: Persisting and converting new plans created during replanning...", iter);
+            int totalConversions = 0;
+            for (Person p : pop.getPersons().values()) {
+                String personId = p.getId().toString();
+                // Persist any regular plans
+                for (Plan plan : p.getPlans()) {
+                    if (!(plan instanceof PlanProxy)) {
+                        String planId = OffloadSupport.ensurePlanId(plan);
+                        double score = OffloadSupport.toStorableScore(plan.getScore());
+                        boolean isSelected = (plan == p.getSelectedPlan());
+                        store.putPlan(personId, planId, plan, score, iter, isSelected);
+                    }
+                }
+                // Convert regular plans to proxies
+                totalConversions += OffloadSupport.convertRegularPlansToProxies(p, store, iter);
+            }
+            if (totalConversions > 0) {
+                log.info("Iteration {}: Converted {} new plans from replanning to proxies", iter, totalConversions);
+            }
+            store.commit();
         }
 
         // Load all plans as proxies for all persons
