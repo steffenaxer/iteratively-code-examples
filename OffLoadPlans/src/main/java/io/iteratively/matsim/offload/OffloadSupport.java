@@ -89,7 +89,7 @@ public final class OffloadSupport {
         store.putPlan(personId, planId, plan, score, iter, false);
         markPersisted(plan);
 
-        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, plan.getScore());
+        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), plan.getPlanMutator(), iter, plan.getScore());
         p.addPlan(proxy);
     }
 

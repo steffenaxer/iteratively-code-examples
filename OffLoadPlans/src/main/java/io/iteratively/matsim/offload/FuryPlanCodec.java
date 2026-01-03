@@ -53,6 +53,7 @@ public final class FuryPlanCodec {
     private PlanDTO toDTO(Plan plan) {
         var out = new PlanDTO();
         out.elements = new ArrayList<>();
+        out.planMutator = plan.getPlanMutator();
         for (var pe : plan.getPlanElements()) {
             if (pe instanceof Activity a) {
                 var d = new ActivityDTO();
@@ -101,6 +102,9 @@ public final class FuryPlanCodec {
 
     private Plan fromDTO(PlanDTO dto) {
         var plan = factory.createPlan();
+        if (dto.planMutator != null) {
+            plan.setPlanMutator(dto.planMutator);
+        }
         for (var e : dto.elements) {
             if (e instanceof ActivityDTO d) {
                 Activity a = (d.linkId != null)

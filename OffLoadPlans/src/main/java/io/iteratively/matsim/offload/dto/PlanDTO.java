@@ -5,4 +5,5 @@ import java.util.List;
 
 public final class PlanDTO {
     public List<PlanElementDTO> elements;
+    public String planMutator;
 }
