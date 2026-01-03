@@ -62,16 +62,16 @@ The module implements a multi-layered time-based dematerialization approach that
 
 ### Dual-Layer Cleanup
 
-Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 5000ms = 5 seconds):
+Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 1000ms = 1 second, kept short to avoid excessive memory usage):
 
 1. **Iteration Boundaries**: Checks and dematerializes old non-selected plans at iteration start and end
-2. **Active Watchdog**: Background monitor that runs continuously from simulation startup to shutdown (checking every 2 seconds) to actively clean up old plans
+2. **Active Watchdog**: Background monitor that runs continuously from simulation startup to shutdown (configurable check interval via `watchdogCheckIntervalMs`, default: 2000ms = 2 seconds) to actively clean up old plans
 
 ### How It Works
 
 - Each `PlanProxy` tracks its materialization timestamp
 - **OffloadIterationHooks** checks at iteration start and end for old plans
-- **PlanMaterializationWatchdog** runs continuously throughout the entire simulation (every 2 seconds) to catch plans that exceed their lifetime
+- **PlanMaterializationWatchdog** runs continuously throughout the entire simulation (configurable interval) to catch plans that exceed their lifetime
 - The watchdog starts when the simulation starts and stops when the simulation shuts down
 - Plans materialized longer than `maxNonSelectedMaterializationTimeMs` are automatically dematerialized
 - Selected plans are never subject to automatic dematerialization
@@ -80,12 +80,10 @@ Non-selected plans are automatically dematerialized when they exceed a configura
 ### Example Timeline
 
 ```
-Simulation starts → Watchdog starts
+Simulation starts → Watchdog starts (checking every 2 seconds)
 t=0ms:    Plan A (non-selected) is materialized for plan selection
-t=2000ms: Watchdog check - Plan A age=2000ms < 5000ms threshold → kept
-t=4000ms: Watchdog check - Plan A age=4000ms < 5000ms threshold → kept
-t=6000ms: Watchdog check - Plan A age=6000ms > 5000ms threshold → dematerialized!
-          Watchdog logs: "Dematerialized 1 non-selected plans older than 5000ms"
+t=1200ms: Watchdog check - Plan A age=1200ms > 1000ms threshold → dematerialized!
+          Watchdog logs: "Dematerialized 1 non-selected plans older than 1000ms"
 ...
 Simulation ends → Watchdog stops
 ```
@@ -231,6 +229,8 @@ The latest version includes several critical optimizations focused on **write pe
     <param name="storageBackend" value="ROCKSDB" />  <!-- or MAPDB -->
     <param name="enableAutodematerialization" value="true" />
     <param name="logMaterializationStats" value="true" />
+    <param name="maxNonSelectedMaterializationTimeMs" value="1000" />
+    <param name="watchdogCheckIntervalMs" value="2000" />
 </module>
 ```
 
@@ -251,19 +251,25 @@ The latest version includes several critical optimizations focused on **write pe
 **enableAutodematerialization** (default: true)
 - Automatically dematerializes non-selected plans to save memory
 - When enabled, non-selected plans exceeding `maxNonSelectedMaterializationTimeMs` are dematerialized at:
-  - Before mobsim
-  - After mobsim
-  - After replanning
-  - Iteration start/end
+  - Iteration start/end (via OffloadIterationHooks)
+  - Periodically by the watchdog (every `watchdogCheckIntervalMs`)
 - Ensures non-selected plans don't remain materialized longer than configured lifetime
 
-**maxNonSelectedMaterializationTimeMs** (default: 5000)
+**maxNonSelectedMaterializationTimeMs** (default: 1000)
 - Maximum time in milliseconds a non-selected plan can remain materialized
-- Default is 5000ms (5 seconds)
+- Default is 1000ms (1 second), kept short to avoid excessive memory usage
 - Lower values = more aggressive cleanup, less memory but more I/O
 - Higher values = less aggressive cleanup, more memory but less I/O
 - Set to `0` to dematerialize immediately (most aggressive)
 - Set to `Long.MAX_VALUE` to effectively disable time-based cleanup
+
+**watchdogCheckIntervalMs** (default: 2000)
+- Interval in milliseconds for the watchdog to check for old materialized plans
+- Default is 2000ms (2 seconds)
+- The watchdog runs continuously from simulation startup to shutdown
+- Lower values = more frequent checks, faster cleanup but more CPU overhead
+- Higher values = less frequent checks, less CPU but potentially longer-lived materialized plans
+- Should typically be set >= `maxNonSelectedMaterializationTimeMs` for efficiency
 
 **logMaterializationStats** (default: true)
 - Logs statistics about materialized plans for debugging
@@ -273,7 +279,7 @@ The latest version includes several critical optimizations focused on **write pe
   - Materialization duration (max and average)
   - Distribution of materialized plans per person
   - Number of plans dematerialized due to age
-- Useful for understanding memory usage patterns and tuning `maxNonSelectedMaterializationTimeMs`
+- Useful for understanding memory usage patterns and tuning `maxNonSelectedMaterializationTimeMs` and `watchdogCheckIntervalMs`
 
 ### Storage Backend Options
 
@@ -315,8 +321,11 @@ offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);  // 
 // Enable time-based dematerialization (default: true)
 offloadConfig.setEnableAutodematerialization(true);
 
-// Set maximum lifetime for non-selected materialized plans (default: 5000ms)
-offloadConfig.setMaxNonSelectedMaterializationTimeMs(5000); // 5 seconds
+// Set maximum lifetime for non-selected materialized plans (default: 1000ms)
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(1000); // 1 second - keep short to avoid excessive memory
+
+// Set watchdog check interval (default: 2000ms)
+offloadConfig.setWatchdogCheckIntervalMs(2000); // 2 seconds
 
 // Enable materialization monitoring (default: true)
 offloadConfig.setLogMaterializationStats(true);
@@ -326,22 +335,26 @@ controler.addOverridingModule(new OffloadModule());
 controler.run();
 ```
 
-### Tuning the Maximum Lifetime
+### Tuning the Parameters
 
-The `maxNonSelectedMaterializationTimeMs` parameter controls the tradeoff between memory usage and I/O:
+The `maxNonSelectedMaterializationTimeMs` and `watchdogCheckIntervalMs` parameters control the tradeoff between memory usage, I/O, and CPU overhead:
 
 ```java
-// Aggressive cleanup - minimal memory, more I/O
-offloadConfig.setMaxNonSelectedMaterializationTimeMs(1000); // 1 second
+// Very aggressive cleanup - minimal memory, more I/O
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(500);  // 0.5 seconds
+offloadConfig.setWatchdogCheckIntervalMs(1000);            // check every 1 second
 
 // Balanced (default) - good for most use cases  
-offloadConfig.setMaxNonSelectedMaterializationTimeMs(5000); // 5 seconds
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(1000); // 1 second
+offloadConfig.setWatchdogCheckIntervalMs(2000);            // check every 2 seconds
 
-// Relaxed - allows plans to stay materialized longer
-offloadConfig.setMaxNonSelectedMaterializationTimeMs(30000); // 30 seconds
+// Relaxed - allows plans to stay materialized longer, less frequent checks
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(5000);  // 5 seconds
+offloadConfig.setWatchdogCheckIntervalMs(5000);             // check every 5 seconds
 
 // Immediate cleanup - dematerialize as soon as possible
-offloadConfig.setMaxNonSelectedMaterializationTimeMs(0); // immediate
+offloadConfig.setMaxNonSelectedMaterializationTimeMs(0);    // immediate
+offloadConfig.setWatchdogCheckIntervalMs(500);              // check very frequently
 ```
 
 ### Monitoring Output Example
@@ -349,20 +362,23 @@ offloadConfig.setMaxNonSelectedMaterializationTimeMs(0); // immediate
 When `logMaterializationStats` is enabled, you'll see output like:
 
 ```
-INFO  OffloadIterationHooks - Iteration 1: Dematerialized 25 non-selected plans older than 5000ms at iteration start
+INFO  PlanMaterializationWatchdog - Plan materialization watchdog started (check interval: 2000ms, max plan lifetime: 1000ms)
+
+INFO  OffloadIterationHooks - Iteration 1: Dematerialized 25 non-selected plans older than 1000ms at iteration start
 
 INFO  PlanMaterializationMonitor - Plan materialization stats at iteration 1 start: 
       MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10125, 
-      selectedMaterialized=10000, nonSelectedMaterialized=125, maxDuration=4891ms, 
-      avgDuration=2134.5ms, distribution={1 materialized=10000, 2 materialized=125}}
+      selectedMaterialized=10000, nonSelectedMaterialized=125, maxDuration=989ms, 
+      avgDuration=512.3ms, distribution={1 materialized=10000, 2 materialized=125}}
 INFO  PlanMaterializationMonitor - Materialization rate: 10125/50000 (20.25 %)
 
-INFO  PlanMaterializationWatchdog - Watchdog: Dematerialized 15 non-selected plans older than 5000ms
+INFO  PlanMaterializationWatchdog - Watchdog: Dematerialized 15 non-selected plans older than 1000ms
 INFO  PlanMaterializationMonitor - Plan materialization stats at watchdog cleanup: 
       MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10000, 
-      selectedMaterialized=10000, nonSelectedMaterialized=0, maxDuration=1234ms, 
-      avgDuration=891.3ms, distribution={1 materialized=10000}}
+      selectedMaterialized=10000, nonSelectedMaterialized=0, maxDuration=987ms, 
+      avgDuration=543.7ms, distribution={1 materialized=10000}}
 INFO  PlanMaterializationMonitor - Materialization rate: 10000/50000 (20.00 %)
+```
 ```
 
 ## Memory Benefits

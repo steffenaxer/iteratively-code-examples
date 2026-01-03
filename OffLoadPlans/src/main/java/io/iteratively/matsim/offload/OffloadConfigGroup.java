@@ -14,6 +14,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private static final String ENABLE_AUTODEMATERIALIZATION = "enableAutodematerialization";
     private static final String LOG_MATERIALIZATION_STATS = "logMaterializationStats";
     private static final String MAX_NON_SELECTED_MATERIALIZATION_TIME_MS = "maxNonSelectedMaterializationTimeMs";
+    private static final String WATCHDOG_CHECK_INTERVAL_MS = "watchdogCheckIntervalMs";
 
     public static final String MAPDB_FILE_NAME = "plans.mapdb";
     public static final String ROCKSDB_DIR_NAME = "plans_rocksdb";
@@ -28,7 +29,8 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private StorageBackend storageBackend = StorageBackend.ROCKSDB;
     private boolean enableAutodematerialization = true;
     private boolean logMaterializationStats = true;
-    private long maxNonSelectedMaterializationTimeMs = 5000; // 5 seconds default
+    private long maxNonSelectedMaterializationTimeMs = 1000; // 1 second default - keep very short to avoid excessive memory usage
+    private long watchdogCheckIntervalMs = 2000; // 2 seconds default
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -134,6 +136,24 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         this.maxNonSelectedMaterializationTimeMs = maxNonSelectedMaterializationTimeMs;
     }
 
+    @StringGetter(WATCHDOG_CHECK_INTERVAL_MS)
+    public String getWatchdogCheckIntervalMsAsString() {
+        return String.valueOf(watchdogCheckIntervalMs);
+    }
+
+    @StringSetter(WATCHDOG_CHECK_INTERVAL_MS)
+    public void setWatchdogCheckIntervalMsFromString(String intervalMs) {
+        this.watchdogCheckIntervalMs = Long.parseLong(intervalMs);
+    }
+
+    public long getWatchdogCheckIntervalMs() {
+        return watchdogCheckIntervalMs;
+    }
+
+    public void setWatchdogCheckIntervalMs(long watchdogCheckIntervalMs) {
+        this.watchdogCheckIntervalMs = watchdogCheckIntervalMs;
+    }
+
     @Override
     public Map<String, String> getComments() {
         Map<String, String> comments = super.getComments();
@@ -142,7 +162,8 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: ROCKSDB)");
         comments.put(ENABLE_AUTODEMATERIALIZATION, "Automatically dematerialize non-selected plans to save memory (default: true)");
         comments.put(LOG_MATERIALIZATION_STATS, "Log statistics about materialized plans for debugging (default: true)");
-        comments.put(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS, "Maximum time in milliseconds a non-selected plan can remain materialized (default: 5000ms = 5 seconds)");
+        comments.put(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS, "Maximum time in milliseconds a non-selected plan can remain materialized (default: 1000ms = 1 second). Keep short to avoid excessive memory usage.");
+        comments.put(WATCHDOG_CHECK_INTERVAL_MS, "Interval in milliseconds for the watchdog to check for old materialized plans (default: 2000ms = 2 seconds)");
         return comments;
     }
 }

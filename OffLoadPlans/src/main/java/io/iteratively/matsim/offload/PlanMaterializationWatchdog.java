@@ -21,9 +21,6 @@ import java.util.TimerTask;
 public final class PlanMaterializationWatchdog implements StartupListener, ShutdownListener {
     private static final Logger log = LogManager.getLogger(PlanMaterializationWatchdog.class);
     
-    // Check every 2 seconds by default
-    private static final long WATCHDOG_INTERVAL_MS = 2000;
-    
     private final Scenario scenario;
     private Timer watchdogTimer;
     private Population currentPopulation;
@@ -61,15 +58,17 @@ public final class PlanMaterializationWatchdog implements StartupListener, Shutd
         isRunning = true;
         watchdogTimer = new Timer("PlanMaterializationWatchdog", true);
         
+        long checkInterval = getConfig().getWatchdogCheckIntervalMs();
+        
         watchdogTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 checkAndDematerialize();
             }
-        }, WATCHDOG_INTERVAL_MS, WATCHDOG_INTERVAL_MS);
+        }, checkInterval, checkInterval);
         
-        log.info("Plan materialization watchdog started (interval: {}ms, max lifetime: {}ms)", 
-                WATCHDOG_INTERVAL_MS, getConfig().getMaxNonSelectedMaterializationTimeMs());
+        log.info("Plan materialization watchdog started (check interval: {}ms, max plan lifetime: {}ms)", 
+                checkInterval, getConfig().getMaxNonSelectedMaterializationTimeMs());
     }
     
     private void stopWatchdog() {
