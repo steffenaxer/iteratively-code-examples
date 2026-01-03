@@ -22,7 +22,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
 
     private int cacheEntries = 1000;
     private String storeDirectory = null;
-    private StorageBackend storageBackend = StorageBackend.MAPDB;
+    private StorageBackend storageBackend = StorageBackend.ROCKSDB;
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -79,7 +79,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         Map<String, String> comments = super.getComments();
         comments.put(CACHE_ENTRIES, "Maximum number of cached plans in memory");
         comments.put(STORE_DIRECTORY, "Directory for the plan store. If null, uses system temp directory");
-        comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: MAPDB)");
+        comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: ROCKSDB)");
         return comments;
     }
 }
