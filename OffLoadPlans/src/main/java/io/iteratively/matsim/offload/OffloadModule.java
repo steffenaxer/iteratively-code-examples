@@ -21,8 +21,6 @@ public final class OffloadModule extends AbstractModule {
     public void install() {
         addControllerListenerBinding().to(OffloadIterationHooks.class);
         addControllerListenerBinding().to(PlanStoreShutdownListener.class).in(Singleton.class);
-        addControllerListenerBinding().to(ActiveDematerializationListener.class);
-        addEventHandlerBinding().to(ActiveDematerializationListener.class);
     }
 
     @Provides

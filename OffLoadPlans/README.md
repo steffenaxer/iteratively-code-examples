@@ -11,15 +11,14 @@ This module implements memory-efficient plan offloading for MATSim simulations u
 1. **PlanProxy** - Lightweight plan wrapper that holds only metadata (score, type, creation iteration)
 2. **MapDbPlanStore / RocksDbPlanStore** - Persistent storage for plan data
 3. **OffloadSupport** - Helper methods for proxy lifecycle management
-4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle
-5. **ActiveDematerializationListener** - Agile dematerialization of non-selected plans
-6. **PlanMaterializationMonitor** - Monitoring and statistics for materialized plans
+4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle and time-based dematerialization
+5. **PlanMaterializationMonitor** - Monitoring and statistics for materialized plans
 
 ### Key Design Principles
 
 - **All plans as proxies**: Every plan is kept in memory as a `PlanProxy` object
 - **Lazy materialization**: Full plan data is loaded only when accessing plan elements
-- **Agile dematerialization**: Non-selected plans are actively dematerialized throughout the iteration
+- **Time-based dematerialization**: Non-selected plans exceeding a configurable lifetime are automatically dematerialized
 - **Score-based selection**: Plan selectors can work with all plans' scores without materialization
 - **Time tracking**: Track how long plans remain materialized for debugging
 
@@ -34,8 +33,8 @@ OffloadSupport.loadAllPlansAsProxies(person, store);
 // 2. Materialize selected plan for simulation
 OffloadSupport.ensureSelectedMaterialized(person, store, cache);
 
-// 3. Dematerialize non-selected plans (if auto-dematerialization enabled)
-ActiveDematerializationListener.dematerializeAllNonSelected();
+// 3. Dematerialize old non-selected plans (if auto-dematerialization enabled)
+PlanMaterializationMonitor.dematerializeAllOldNonSelected(population, maxLifetimeMs);
 ```
 
 ### During Replanning
@@ -55,7 +54,7 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 // This happens automatically inside persistAllMaterialized
 ```
 
-## Agile Dematerialization Strategy
+## Time-Based Dematerialization Strategy
 
 The module implements a time-based dematerialization approach that limits how long non-selected plans can remain materialized:
 
@@ -63,15 +62,13 @@ The module implements a time-based dematerialization approach that limits how lo
 
 Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 5000ms = 5 seconds):
 
-1. **Before Mobsim**: Checks and dematerializes old non-selected plans
-2. **After Mobsim**: Checks and dematerializes old non-selected plans  
-3. **After Replanning**: Checks and dematerializes old non-selected plans
-4. **Iteration Start/End**: Additional cleanup at iteration boundaries
+1. **Iteration Start**: Checks and dematerializes old non-selected plans
+2. **Iteration End**: Checks and dematerializes old non-selected plans
 
 ### How It Works
 
 - Each `PlanProxy` tracks its materialization timestamp
-- At each checkpoint, non-selected plans are checked
+- At iteration start and end, non-selected plans are checked
 - Plans materialized longer than `maxNonSelectedMaterializationTimeMs` are automatically dematerialized
 - Selected plans are never subject to automatic dematerialization
 - This ensures non-selected plans don't linger in memory unnecessarily
@@ -80,9 +77,8 @@ Non-selected plans are automatically dematerialized when they exceed a configura
 
 ```
 t=0ms:    Plan A (non-selected) is materialized for plan selection
-t=1000ms: BeforeMobsim check - Plan A age=1000ms < 5000ms threshold → kept
-t=3000ms: AfterMobsim check - Plan A age=3000ms < 5000ms threshold → kept  
-t=6000ms: AfterReplanning check - Plan A age=6000ms > 5000ms threshold → dematerialized!
+t=3000ms: Iteration end check - Plan A age=3000ms < 5000ms threshold → kept
+t=6000ms: Iteration start check - Plan A age=6000ms > 5000ms threshold → dematerialized!
 ```
 
 ## Key Classes and Methods
@@ -142,11 +138,12 @@ t=6000ms: AfterReplanning check - Plan A age=6000ms > 5000ms threshold → demat
 - **`dematerializeOldNonSelected(Person, long)`**
   - Time-based dematerialization for plans older than threshold
 
-### ActiveDematerializationListener
+### OffloadIterationHooks
 
-Automatically registered listener that:
-- Implements `BeforeMobsimListener`, `AfterMobsimListener`, `ReplanningListener`
-- Actively dematerializes non-selected plans at multiple points during iteration
+Iteration lifecycle integration:
+- Loads all plans as proxies at iteration start
+- Ensures selected plans are materialized for simulation
+- Automatically dematerializes old non-selected plans at iteration start/end
 - Respects the `enableAutodematerialization` configuration flag
 - Logs statistics if `logMaterializationStats` is enabled
 
@@ -333,13 +330,13 @@ offloadConfig.setMaxNonSelectedMaterializationTimeMs(0); // immediate
 When `logMaterializationStats` is enabled, you'll see output like:
 
 ```
-INFO  ActiveDematerializationListener - Iteration 1, before mobsim: Dematerialized 25 non-selected plans 
-      older than 5000ms (found 150 materialized, max age: 8234ms)
+INFO  OffloadIterationHooks - Iteration 1: Dematerialized 25 non-selected plans older than 5000ms at iteration start
 
-INFO  PlanMaterializationMonitor - Plan materialization stats at iteration 1, before mobsim 
-      (after time-based dematerialization): MaterializationStats{totalPersons=10000, totalPlans=50000, 
-      materializedPlans=10125, selectedMaterialized=10000, nonSelectedMaterialized=125, 
-      maxDuration=4891ms, avgDuration=2134.5ms, distribution={1 materialized=10000, 2 materialized=125}}
+INFO  PlanMaterializationMonitor - Plan materialization stats at iteration 1 start: 
+      MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10125, 
+      selectedMaterialized=10000, nonSelectedMaterialized=125, maxDuration=4891ms, 
+      avgDuration=2134.5ms, distribution={1 materialized=10000, 2 materialized=125}}
+INFO  PlanMaterializationMonitor - Materialization rate: 10125/50000 (20.25%)
 ```
 
 ## Memory Benefits
