@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.matsim.api.core.v01.population.Person;
+import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.controler.events.IterationEndsEvent;
 import org.matsim.core.controler.events.IterationStartsEvent;
 import org.matsim.core.controler.listener.IterationEndsListener;
@@ -14,11 +15,13 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
 
     private final PlanStore store;
     private final PlanCache cache;
+    private final OffloadConfigGroup config;
 
     @Inject
-    public OffloadIterationHooks(PlanStore store, PlanCache cache) {
+    public OffloadIterationHooks(PlanStore store, PlanCache cache, OffloadConfigGroup config) {
         this.store = store;
         this.cache = cache;
+        this.config = config;
     }
 
     @Override
@@ -46,6 +49,16 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
             OffloadSupport.ensureSelectedMaterialized(p, store, cache);
         }
 
+        // Auto-dematerialize non-selected plans if enabled
+        if (config.isEnableAutodematerialization()) {
+            PlanMaterializationMonitor.dematerializeAllNonSelected(pop);
+        }
+
+        // Log materialization statistics if enabled
+        if (config.isLogMaterializationStats()) {
+            PlanMaterializationMonitor.logStats(pop, "iteration " + iter + " start");
+        }
+
         store.commit();
     }
 
@@ -62,6 +75,16 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
 
         store.commit();
         cache.evictAll();
+
+        // Auto-dematerialize non-selected plans if enabled
+        if (config.isEnableAutodematerialization()) {
+            PlanMaterializationMonitor.dematerializeAllNonSelected(pop);
+        }
+
+        // Log materialization statistics if enabled
+        if (config.isLogMaterializationStats()) {
+            PlanMaterializationMonitor.logStats(pop, "iteration " + iter + " end");
+        }
 
         log.info("Iteration {}: Plan offload completed", iter);
     }

@@ -21,6 +21,8 @@ public final class OffloadModule extends AbstractModule {
     public void install() {
         addControllerListenerBinding().to(OffloadIterationHooks.class);
         addControllerListenerBinding().to(PlanStoreShutdownListener.class).in(Singleton.class);
+        addControllerListenerBinding().to(ActiveDematerializationListener.class);
+        addEventHandlerBinding().to(ActiveDematerializationListener.class);
     }
 
     @Provides
@@ -69,5 +71,11 @@ public final class OffloadModule extends AbstractModule {
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(
                 scenario.getConfig(), OffloadConfigGroup.class);
         return new PlanCache(store, offloadConfig.getCacheEntries());
+    }
+
+    @Provides
+    @Singleton
+    OffloadConfigGroup provideOffloadConfig(Scenario scenario) {
+        return ConfigUtils.addOrGetModule(scenario.getConfig(), OffloadConfigGroup.class);
     }
 }
