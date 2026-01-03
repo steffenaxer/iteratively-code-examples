@@ -13,7 +13,7 @@
     </modules>
 
     <properties>
-        <matsim.version>2026.0-2025w50</matsim.version>
+        <matsim.version>2026.0-2025w52</matsim.version>
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -27,11 +27,10 @@ public class OffloadModuleIT {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
 
-        File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
-        offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
         offloadConfig.setCacheEntries(2000);
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
+        // Store directory will default to outputDirectory/planstore
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
@@ -39,7 +38,8 @@ public class OffloadModuleIT {
         config.controller().setLastIteration(20);
         config.replanning().setMaxAgentPlanMemorySize(3);
 
-        Scenario scenario = ScenarioUtils.loadScenario(config);
+        // Use streaming approach to load scenario
+        Scenario scenario = OffloadSupport.loadScenarioWithStreaming(config);
 
         Controler controler = new Controler(scenario);
         controler.addOverridingModule(new OffloadModule());
@@ -52,7 +52,8 @@ public class OffloadModuleIT {
             Thread.currentThread().interrupt();
         }
 
-        File rocksDbDir = new File(storeDir, "rocksdb");
+        File storeDir = new File(utils.getOutputDirectory(), "planstore");
+        File rocksDbDir = new File(storeDir, OffloadConfigGroup.ROCKSDB_DIR_NAME);
 
         assertTrue(rocksDbDir.exists(), "RocksDB directory should exist");
         assertTrue(rocksDbDir.isDirectory(), "RocksDB store should be a directory");
@@ -73,22 +74,24 @@ public class OffloadModuleIT {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
 
-        File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
-        offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
+        // Storage backend defaults to MAPDB
+        // Store directory will default to outputDirectory/planstore
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
                 OutputDirectoryHierarchy.OverwriteFileSetting.deleteDirectoryIfExists);
         config.controller().setLastIteration(1);
 
-        Scenario scenario = ScenarioUtils.loadScenario(config);
+        // Use streaming approach to load scenario
+        Scenario scenario = OffloadSupport.loadScenarioWithStreaming(config);
 
         Controler controler = new Controler(scenario);
         controler.addOverridingModule(new OffloadModule());
         controler.run();
 
-        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
+        File storeDir = new File(utils.getOutputDirectory(), "planstore");
+        File dbFile = new File(storeDir, OffloadConfigGroup.MAPDB_FILE_NAME);
 
         try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
