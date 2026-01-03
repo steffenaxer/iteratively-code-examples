@@ -10,6 +10,7 @@ import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.scenario.ScenarioUtils;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class OffloadSupport {
@@ -56,7 +57,13 @@ public final class OffloadSupport {
     public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
         String personId = p.getId().toString();
 
-        for (Plan plan : p.getPlans()) {
+        // Track regular plans that need to be converted to proxies
+        List<Integer> regularPlanIndices = new ArrayList<>();
+        List<PlanProxy> replacementProxies = new ArrayList<>();
+
+        List<? extends Plan> plans = p.getPlans();
+        for (int i = 0; i < plans.size(); i++) {
+            Plan plan = plans.get(i);
             if (plan instanceof PlanProxy proxy) {
                 if (proxy.isMaterialized()) {
                     Plan materialized = proxy.getMaterializedPlan();
@@ -70,13 +77,36 @@ public final class OffloadSupport {
                     proxy.dematerialize();
                 }
             } else {
+                // Regular plan - persist it and prepare to convert to proxy
                 if (shouldPersist(plan)) {
                     String planId = ensurePlanId(plan);
                     double score = toStorableScore(plan.getScore());
                     boolean isSelected = (plan == p.getSelectedPlan());
                     store.putPlan(personId, planId, plan, score, iter, isSelected);
                     markPersisted(plan);
+                    
+                    // Create proxy to replace the regular plan
+                    PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), 
+                        plan.getPlanMutator(), iter, plan.getScore());
+                    regularPlanIndices.add(i);
+                    replacementProxies.add(proxy);
                 }
+            }
+        }
+
+        // Replace regular plans with proxies
+        for (int i = 0; i < regularPlanIndices.size(); i++) {
+            int index = regularPlanIndices.get(i);
+            PlanProxy proxy = replacementProxies.get(i);
+            Plan oldPlan = plans.get(index);
+            
+            // Remove the old plan and insert the proxy at the same position
+            p.getPlans().remove(index);
+            p.getPlans().add(index, proxy);
+            
+            // If the old plan was selected, update the selected plan to the proxy
+            if (oldPlan == p.getSelectedPlan()) {
+                p.setSelectedPlan(proxy);
             }
         }
     }
