@@ -6,19 +6,19 @@ import org.apache.logging.log4j.Logger;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Population;
 import org.matsim.core.config.ConfigUtils;
-import org.matsim.core.controler.events.IterationEndsEvent;
-import org.matsim.core.controler.events.IterationStartsEvent;
-import org.matsim.core.controler.listener.IterationEndsListener;
-import org.matsim.core.controler.listener.IterationStartsListener;
+import org.matsim.core.controler.events.ShutdownEvent;
+import org.matsim.core.controler.events.StartupEvent;
+import org.matsim.core.controler.listener.ShutdownListener;
+import org.matsim.core.controler.listener.StartupListener;
 
 import java.util.Timer;
 import java.util.TimerTask;
 
 /**
  * Active watchdog that monitors and dematerializes non-selected plans that exceed their lifetime.
- * Runs periodically during iterations to ensure non-selected plans don't stay in memory too long.
+ * Runs continuously from simulation startup to shutdown, checking object lifetimes periodically.
  */
-public final class PlanMaterializationWatchdog implements IterationStartsListener, IterationEndsListener {
+public final class PlanMaterializationWatchdog implements StartupListener, ShutdownListener {
     private static final Logger log = LogManager.getLogger(PlanMaterializationWatchdog.class);
     
     // Check every 2 seconds by default
@@ -39,7 +39,7 @@ public final class PlanMaterializationWatchdog implements IterationStartsListene
     }
     
     @Override
-    public void notifyIterationStarts(IterationStartsEvent event) {
+    public void notifyStartup(StartupEvent event) {
         if (!getConfig().isEnableAutodematerialization()) {
             return;
         }
@@ -49,7 +49,7 @@ public final class PlanMaterializationWatchdog implements IterationStartsListene
     }
     
     @Override
-    public void notifyIterationEnds(IterationEndsEvent event) {
+    public void notifyShutdown(ShutdownEvent event) {
         stopWatchdog();
     }
     
@@ -68,7 +68,8 @@ public final class PlanMaterializationWatchdog implements IterationStartsListene
             }
         }, WATCHDOG_INTERVAL_MS, WATCHDOG_INTERVAL_MS);
         
-        log.debug("Plan materialization watchdog started (interval: {}ms)", WATCHDOG_INTERVAL_MS);
+        log.info("Plan materialization watchdog started (interval: {}ms, max lifetime: {}ms)", 
+                WATCHDOG_INTERVAL_MS, getConfig().getMaxNonSelectedMaterializationTimeMs());
     }
     
     private void stopWatchdog() {
@@ -82,7 +83,7 @@ public final class PlanMaterializationWatchdog implements IterationStartsListene
             watchdogTimer = null;
         }
         
-        log.debug("Plan materialization watchdog stopped");
+        log.info("Plan materialization watchdog stopped");
     }
     
     private void checkAndDematerialize() {

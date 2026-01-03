@@ -65,13 +65,14 @@ The module implements a multi-layered time-based dematerialization approach that
 Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 5000ms = 5 seconds):
 
 1. **Iteration Boundaries**: Checks and dematerializes old non-selected plans at iteration start and end
-2. **Active Watchdog**: Background monitor that runs every 2 seconds during iterations to actively clean up old plans
+2. **Active Watchdog**: Background monitor that runs continuously from simulation startup to shutdown (checking every 2 seconds) to actively clean up old plans
 
 ### How It Works
 
 - Each `PlanProxy` tracks its materialization timestamp
 - **OffloadIterationHooks** checks at iteration start and end for old plans
-- **PlanMaterializationWatchdog** runs continuously during iterations (every 2 seconds) to catch plans that exceed their lifetime
+- **PlanMaterializationWatchdog** runs continuously throughout the entire simulation (every 2 seconds) to catch plans that exceed their lifetime
+- The watchdog starts when the simulation starts and stops when the simulation shuts down
 - Plans materialized longer than `maxNonSelectedMaterializationTimeMs` are automatically dematerialized
 - Selected plans are never subject to automatic dematerialization
 - Whenever the watchdog cleans up plans, it logs statistics for monitoring
@@ -79,11 +80,14 @@ Non-selected plans are automatically dematerialized when they exceed a configura
 ### Example Timeline
 
 ```
+Simulation starts → Watchdog starts
 t=0ms:    Plan A (non-selected) is materialized for plan selection
 t=2000ms: Watchdog check - Plan A age=2000ms < 5000ms threshold → kept
 t=4000ms: Watchdog check - Plan A age=4000ms < 5000ms threshold → kept
 t=6000ms: Watchdog check - Plan A age=6000ms > 5000ms threshold → dematerialized!
           Watchdog logs: "Dematerialized 1 non-selected plans older than 5000ms"
+...
+Simulation ends → Watchdog stops
 ```
 
 ## Key Classes and Methods
@@ -155,12 +159,12 @@ Iteration lifecycle integration:
 ### PlanMaterializationWatchdog
 
 Active background monitoring:
-- Runs as a daemon thread during iterations (checks every 2 seconds)
+- Runs as a daemon thread continuously throughout the entire simulation (checks every 2 seconds)
+- Starts when the simulation starts (StartupEvent) and stops when simulation shuts down (ShutdownEvent)
 - Continuously monitors for non-selected plans exceeding `maxNonSelectedMaterializationTimeMs`
 - Automatically dematerializes old plans whenever detected
 - Logs cleanup actions and statistics when dematerialization occurs
-- Starts at iteration beginning, stops at iteration end
-- Provides an additional safety net beyond iteration boundary checks
+- Provides continuous protection against memory bloat from materialized plans
 
 ## Performance Optimizations
 
