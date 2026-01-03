@@ -19,6 +19,7 @@ import org.matsim.core.config.groups.ScoringConfigGroup;
 import org.matsim.core.config.groups.ReplanningConfigGroup;
 import org.matsim.core.controler.Controler;
 import org.matsim.core.controler.OutputDirectoryHierarchy;
+import org.matsim.core.gbl.MatsimRandom;
 import org.matsim.core.population.io.PopulationReader;
 import org.matsim.core.population.io.PopulationWriter;
 import org.matsim.core.scenario.ScenarioUtils;
@@ -170,14 +171,17 @@ public class RocksDbMatsimIntegrationTest {
     @Test
     public void testCompareAllStorageBackends() {
         // Run simulation with RocksDB
+        MatsimRandom.reset();
         Scenario rocksDbResult = runSimulationWithConfig("rocksdb", 
             OffloadConfigGroup.StorageBackend.ROCKSDB, true);
         
         // Run simulation with MapDB
+        MatsimRandom.reset();
         Scenario mapDbResult = runSimulationWithConfig("mapdb", 
             OffloadConfigGroup.StorageBackend.MAPDB, true);
         
         // Run simulation without offload
+        MatsimRandom.reset();
         Scenario noOffloadResult = runSimulationWithConfig("no-offload", 
             null, false);
         
