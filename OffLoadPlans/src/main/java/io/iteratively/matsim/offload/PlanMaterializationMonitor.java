@@ -135,14 +135,14 @@ public final class PlanMaterializationMonitor {
         // Log memory efficiency
         if (stats.totalPlans > 0) {
             double materializationRate = (stats.materializedPlans * 100.0) / stats.totalPlans;
-            log.info("Materialization rate: {}/{} ({:.2f}%)", 
-                    stats.materializedPlans, stats.totalPlans, materializationRate);
+            log.info("Materialization rate: {}/{} ({} %)", 
+                    stats.materializedPlans, stats.totalPlans, String.format("%.2f", materializationRate));
         }
         
         // Log duration info
         if (stats.maxMaterializationDurationMs > 0) {
-            log.info("Materialization durations - max: {}ms, avg: {:.1f}ms", 
-                    stats.maxMaterializationDurationMs, stats.avgMaterializationDurationMs);
+            log.info("Materialization durations - max: {}ms, avg: {}ms", 
+                    stats.maxMaterializationDurationMs, String.format("%.1f", stats.avgMaterializationDurationMs));
         }
         
         // Warn if too many non-selected plans are materialized

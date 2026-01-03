@@ -11,13 +11,15 @@ This module implements memory-efficient plan offloading for MATSim simulations u
 1. **PlanProxy** - Lightweight plan wrapper that holds only metadata (score, type, creation iteration)
 2. **MapDbPlanStore / RocksDbPlanStore** - Persistent storage for plan data
 3. **OffloadSupport** - Helper methods for proxy lifecycle management
-4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle and time-based dematerialization
-5. **PlanMaterializationMonitor** - Monitoring and statistics for materialized plans
+4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle and time-based dematerialization at iteration boundaries
+5. **PlanMaterializationWatchdog** - Active background monitor that periodically checks and dematerializes old non-selected plans
+6. **PlanMaterializationMonitor** - Monitoring and statistics for materialized plans
 
 ### Key Design Principles
 
 - **All plans as proxies**: Every plan is kept in memory as a `PlanProxy` object
 - **Lazy materialization**: Full plan data is loaded only when accessing plan elements
+- **Active watchdog monitoring**: Background thread continuously monitors and dematerializes old non-selected plans
 - **Time-based dematerialization**: Non-selected plans exceeding a configurable lifetime are automatically dematerialized
 - **Score-based selection**: Plan selectors can work with all plans' scores without materialization
 - **Time tracking**: Track how long plans remain materialized for debugging
@@ -56,29 +58,32 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ## Time-Based Dematerialization Strategy
 
-The module implements a time-based dematerialization approach that limits how long non-selected plans can remain materialized:
+The module implements a multi-layered time-based dematerialization approach that ensures non-selected plans don't remain materialized longer than necessary:
 
-### Time-Based Cleanup
+### Dual-Layer Cleanup
 
 Non-selected plans are automatically dematerialized when they exceed a configurable maximum lifetime (`maxNonSelectedMaterializationTimeMs`, default: 5000ms = 5 seconds):
 
-1. **Iteration Start**: Checks and dematerializes old non-selected plans
-2. **Iteration End**: Checks and dematerializes old non-selected plans
+1. **Iteration Boundaries**: Checks and dematerializes old non-selected plans at iteration start and end
+2. **Active Watchdog**: Background monitor that runs every 2 seconds during iterations to actively clean up old plans
 
 ### How It Works
 
 - Each `PlanProxy` tracks its materialization timestamp
-- At iteration start and end, non-selected plans are checked
+- **OffloadIterationHooks** checks at iteration start and end for old plans
+- **PlanMaterializationWatchdog** runs continuously during iterations (every 2 seconds) to catch plans that exceed their lifetime
 - Plans materialized longer than `maxNonSelectedMaterializationTimeMs` are automatically dematerialized
 - Selected plans are never subject to automatic dematerialization
-- This ensures non-selected plans don't linger in memory unnecessarily
+- Whenever the watchdog cleans up plans, it logs statistics for monitoring
 
 ### Example Timeline
 
 ```
 t=0ms:    Plan A (non-selected) is materialized for plan selection
-t=3000ms: Iteration end check - Plan A age=3000ms < 5000ms threshold → kept
-t=6000ms: Iteration start check - Plan A age=6000ms > 5000ms threshold → dematerialized!
+t=2000ms: Watchdog check - Plan A age=2000ms < 5000ms threshold → kept
+t=4000ms: Watchdog check - Plan A age=4000ms < 5000ms threshold → kept
+t=6000ms: Watchdog check - Plan A age=6000ms > 5000ms threshold → dematerialized!
+          Watchdog logs: "Dematerialized 1 non-selected plans older than 5000ms"
 ```
 
 ## Key Classes and Methods
@@ -146,6 +151,16 @@ Iteration lifecycle integration:
 - Automatically dematerializes old non-selected plans at iteration start/end
 - Respects the `enableAutodematerialization` configuration flag
 - Logs statistics if `logMaterializationStats` is enabled
+
+### PlanMaterializationWatchdog
+
+Active background monitoring:
+- Runs as a daemon thread during iterations (checks every 2 seconds)
+- Continuously monitors for non-selected plans exceeding `maxNonSelectedMaterializationTimeMs`
+- Automatically dematerializes old plans whenever detected
+- Logs cleanup actions and statistics when dematerialization occurs
+- Starts at iteration beginning, stops at iteration end
+- Provides an additional safety net beyond iteration boundary checks
 
 ## Performance Optimizations
 
@@ -336,7 +351,14 @@ INFO  PlanMaterializationMonitor - Plan materialization stats at iteration 1 sta
       MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10125, 
       selectedMaterialized=10000, nonSelectedMaterialized=125, maxDuration=4891ms, 
       avgDuration=2134.5ms, distribution={1 materialized=10000, 2 materialized=125}}
-INFO  PlanMaterializationMonitor - Materialization rate: 10125/50000 (20.25%)
+INFO  PlanMaterializationMonitor - Materialization rate: 10125/50000 (20.25 %)
+
+INFO  PlanMaterializationWatchdog - Watchdog: Dematerialized 15 non-selected plans older than 5000ms
+INFO  PlanMaterializationMonitor - Plan materialization stats at watchdog cleanup: 
+      MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10000, 
+      selectedMaterialized=10000, nonSelectedMaterialized=0, maxDuration=1234ms, 
+      avgDuration=891.3ms, distribution={1 materialized=10000}}
+INFO  PlanMaterializationMonitor - Materialization rate: 10000/50000 (20.00 %)
 ```
 
 ## Memory Benefits
