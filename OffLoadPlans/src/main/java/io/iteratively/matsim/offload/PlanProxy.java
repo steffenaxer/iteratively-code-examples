@@ -24,6 +24,7 @@ public final class PlanProxy implements Plan {
     private String type;
 
     private Plan materializedPlan;
+    private long materializationTimestamp = -1; // Timestamp when plan was materialized
 
     public PlanProxy(PlanHeader header, Person person, PlanStore store) {
         this.planId = header.planId;
@@ -207,6 +208,7 @@ public final class PlanProxy implements Plan {
             if (type != null) {
                 materializedPlan.setType(type);
             }
+            materializationTimestamp = System.currentTimeMillis();
         }
     }
 
@@ -226,7 +228,27 @@ public final class PlanProxy implements Plan {
             this.score = isValidScore(matScore) ? matScore : null;
             this.type = materializedPlan.getType();
             this.materializedPlan = null;
+            this.materializationTimestamp = -1;
         }
+    }
+
+    /**
+     * Returns the timestamp (in milliseconds) when this plan was materialized.
+     * Returns -1 if the plan is not currently materialized.
+     */
+    public long getMaterializationTimestamp() {
+        return materializationTimestamp;
+    }
+
+    /**
+     * Returns the number of milliseconds this plan has been materialized.
+     * Returns -1 if the plan is not currently materialized.
+     */
+    public long getMaterializationDurationMs() {
+        if (materializationTimestamp < 0) {
+            return -1;
+        }
+        return System.currentTimeMillis() - materializationTimestamp;
     }
 
     @Override
