@@ -57,10 +57,6 @@ public final class OffloadSupport {
     public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
         String personId = p.getId().toString();
 
-        // Track regular plans that need to be converted to proxies
-        List<Integer> regularPlanIndices = new ArrayList<>();
-        List<PlanProxy> replacementProxies = new ArrayList<>();
-
         List<? extends Plan> plans = p.getPlans();
         for (int i = 0; i < plans.size(); i++) {
             Plan plan = plans.get(i);
@@ -77,38 +73,61 @@ public final class OffloadSupport {
                     proxy.dematerialize();
                 }
             } else {
-                // Regular plan - persist it and prepare to convert to proxy
+                // Regular plan - persist it and convert to proxy
                 if (shouldPersist(plan)) {
                     String planId = ensurePlanId(plan);
                     double score = toStorableScore(plan.getScore());
                     boolean isSelected = (plan == p.getSelectedPlan());
                     store.putPlan(personId, planId, plan, score, iter, isSelected);
                     markPersisted(plan);
-                    
-                    // Create proxy to replace the regular plan
-                    PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), 
-                        plan.getPlanMutator(), iter, plan.getScore());
-                    regularPlanIndices.add(i);
-                    replacementProxies.add(proxy);
                 }
             }
         }
-
-        // Replace regular plans with proxies
-        for (int i = 0; i < regularPlanIndices.size(); i++) {
-            int index = regularPlanIndices.get(i);
-            PlanProxy proxy = replacementProxies.get(i);
-            Plan oldPlan = plans.get(index);
+        
+        // After persisting, convert any remaining regular plans to proxies
+        convertRegularPlansToProxies(p, store, iter);
+    }
+    
+    /**
+     * Converts any regular Plan objects in the person's plans list to PlanProxy objects.
+     * This should be called after plans have been persisted to the store.
+     * 
+     * @param p the person whose plans to convert
+     * @param store the plan store
+     * @param iter the current iteration
+     * @return the number of plans converted
+     */
+    public static int convertRegularPlansToProxies(Person p, PlanStore store, int iter) {
+        String personId = p.getId().toString();
+        
+        // Collect regular plans that need to be converted
+        List<Plan> regularPlans = new ArrayList<>();
+        for (Plan plan : p.getPlans()) {
+            if (!(plan instanceof PlanProxy)) {
+                regularPlans.add(plan);
+            }
+        }
+        
+        // Convert each regular plan to a proxy
+        Plan selectedPlan = p.getSelectedPlan();
+        for (Plan plan : regularPlans) {
+            String planId = ensurePlanId(plan);
             
-            // Remove the old plan and insert the proxy at the same position
-            p.getPlans().remove(index);
-            p.getPlans().add(index, proxy);
+            // Create proxy replacement
+            PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), 
+                plan.getPlanMutator(), iter, plan.getScore());
             
-            // If the old plan was selected, update the selected plan to the proxy
-            if (oldPlan == p.getSelectedPlan()) {
+            // Remove old plan and add proxy
+            p.removePlan(plan);
+            p.addPlan(proxy);
+            
+            // If this was the selected plan, update selection
+            if (plan == selectedPlan) {
                 p.setSelectedPlan(proxy);
             }
         }
+        
+        return regularPlans.size();
     }
 
     public static void addNewPlan(Person p, Plan plan, PlanStore store, int iter) {
