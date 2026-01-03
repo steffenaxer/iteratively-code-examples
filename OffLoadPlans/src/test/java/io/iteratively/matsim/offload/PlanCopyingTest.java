@@ -59,7 +59,7 @@ public class PlanCopyingTest {
             copiedPlan.setPlanMutator("TimeAllocationMutator"); // Strategy sets this
             
             // Add the copied plan directly (like MATSim does)
-            person.getPlans().add(copiedPlan);
+            person.addPlan(copiedPlan);
             person.setSelectedPlan(copiedPlan);
             
             assertEquals(2, person.getPlans().size(), "Should have 2 plans after copying");
@@ -120,7 +120,7 @@ public class PlanCopyingTest {
                 newPlan.setScore(10.0 + i);
                 newPlan.setPerson(person);
                 newPlan.setPlanMutator("Strategy" + i);
-                person.getPlans().add(newPlan);
+                person.addPlan(newPlan);
             }
 
             assertEquals(4, person.getPlans().size(), "Should have 4 plans");
