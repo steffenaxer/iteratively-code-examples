@@ -14,7 +14,6 @@ import org.matsim.core.scenario.ScenarioUtils;
 import java.io.File;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 /**
  * Test to verify that the ReplanningConversionListener correctly converts
@@ -59,25 +58,50 @@ public class ReplanningConversionListenerTest {
             copiedPlan.setPerson(person);
             copiedPlan.setPlanMutator("TimeAllocationMutator");
             
-            // Add the copied plan (like MATSim does during replanning)
-            person.getPlans().add(copiedPlan);
+            // Add the copied plan using proper API (like MATSim does during replanning)
+            person.addPlan(copiedPlan);
             person.setSelectedPlan(copiedPlan);
             
             assertEquals(2, person.getPlans().size(), "Should have 2 plans");
             assertTrue(person.getPlans().get(0) instanceof PlanProxy, "First plan should be proxy");
             assertFalse(person.getPlans().get(1) instanceof PlanProxy, "Copied plan should be regular Plan");
 
-            // Create the listener and simulate the replanning event
+            // Create a simple mock ReplanningEvent
+            ReplanningEvent event = new ReplanningEvent() {
+                @Override
+                public int getIteration() {
+                    return 1;
+                }
+
+                @Override
+                public org.matsim.core.controler.MatsimServices getServices() {
+                    return new org.matsim.core.controler.MatsimServices() {
+                        @Override
+                        public Scenario getScenario() {
+                            return sc;
+                        }
+
+                        // Other methods can throw UnsupportedOperationException as they won't be called
+                        @Override
+                        public org.matsim.core.config.Config getConfig() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public org.matsim.core.events.EventsManager getEvents() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public com.google.inject.Injector getInjector() {
+                            throw new UnsupportedOperationException();
+                        }
+                    };
+                }
+            };
+            
+            // Create the listener and trigger it
             ReplanningConversionListener listener = new ReplanningConversionListener(store, cache);
-            
-            // Mock the event
-            ReplanningEvent event = mock(ReplanningEvent.class);
-            var services = mock(org.matsim.core.controler.MatsimServices.class);
-            when(event.getIteration()).thenReturn(1);
-            when(event.getServices()).thenReturn(services);
-            when(services.getScenario()).thenReturn(sc);
-            
-            // Trigger the listener
             listener.notifyReplanning(event);
 
             // Verify that the regular plan was converted to a proxy
@@ -133,16 +157,41 @@ public class ReplanningConversionListenerTest {
                 assertTrue(plan instanceof PlanProxy, "All plans should be proxies");
             }
 
-            // Create the listener and simulate the replanning event
+            // Create a simple mock ReplanningEvent
+            ReplanningEvent event = new ReplanningEvent() {
+                @Override
+                public int getIteration() {
+                    return 1;
+                }
+
+                @Override
+                public org.matsim.core.controler.MatsimServices getServices() {
+                    return new org.matsim.core.controler.MatsimServices() {
+                        @Override
+                        public Scenario getScenario() {
+                            return sc;
+                        }
+
+                        @Override
+                        public org.matsim.core.config.Config getConfig() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public org.matsim.core.events.EventsManager getEvents() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public com.google.inject.Injector getInjector() {
+                            throw new UnsupportedOperationException();
+                        }
+                    };
+                }
+            };
+            
+            // Create the listener and trigger it
             ReplanningConversionListener listener = new ReplanningConversionListener(store, cache);
-            
-            ReplanningEvent event = mock(ReplanningEvent.class);
-            var services = mock(org.matsim.core.controler.MatsimServices.class);
-            when(event.getIteration()).thenReturn(1);
-            when(event.getServices()).thenReturn(services);
-            when(services.getScenario()).thenReturn(sc);
-            
-            // Trigger the listener - should do nothing since all plans are already proxies
             listener.notifyReplanning(event);
 
             // Verify all plans are still proxies and count hasn't changed
