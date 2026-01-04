@@ -40,7 +40,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load all plans as proxies
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
 
             // Verify all plans are loaded as proxies
             List<? extends Plan> plans = person.getPlans();
@@ -130,7 +130,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load as proxy
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
             PlanProxy proxy = (PlanProxy) person.getPlans().get(0);
 
             assertFalse(proxy.isMaterialized(), "Should start not materialized");
@@ -178,7 +178,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load all as proxies
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
 
             // Verify initial state
             assertEquals(2, person.getPlans().size());

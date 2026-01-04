@@ -22,6 +22,9 @@ public final class PlanProxy implements Plan {
     // Cached values - work without materialization
     private Double score;
     private String type;
+    
+    // Track the current iteration for score updates
+    private int currentIteration;
 
     private Plan materializedPlan;
 
@@ -33,6 +36,8 @@ public final class PlanProxy implements Plan {
         this.creationIter = header.creationIter;
         // NaN als null behandeln
         this.score = isValidScore(header.score) ? header.score : null;
+        // Initialize with lastUsedIter from header
+        this.currentIteration = header.lastUsedIter;
     }
 
     public PlanProxy(String planId, Person person, PlanStore store, String type,
@@ -44,6 +49,8 @@ public final class PlanProxy implements Plan {
         this.creationIter = creationIter;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
+        // For new plans, current iteration equals creation iteration
+        this.currentIteration = creationIter;
     }
 
     private static boolean isValidScore(Double score) {
@@ -52,6 +59,17 @@ public final class PlanProxy implements Plan {
 
     public String getPlanId() {
         return planId;
+    }
+    
+    /**
+     * Sets the current iteration for this proxy.
+     * This should be called at the start of each iteration to ensure
+     * that score updates are persisted with the correct iteration number.
+     * 
+     * @param iteration the current iteration number
+     */
+    public void setCurrentIteration(int iteration) {
+        this.currentIteration = iteration;
     }
 
     @Override
@@ -94,7 +112,7 @@ public final class PlanProxy implements Plan {
 
         // Nur gültige Scores zum Store schreiben
         if (this.score != null) {
-            store.updateScore(person.getId().toString(), planId, this.score, creationIter);
+            store.updateScore(person.getId().toString(), planId, this.score, currentIteration);
         }
     }
 
