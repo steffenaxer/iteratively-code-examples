@@ -14,6 +14,7 @@ import org.matsim.api.core.v01.population.PopulationFactory;
 import org.matsim.core.population.routes.NetworkRoute;
 import org.matsim.core.population.routes.RouteUtils;
 import org.matsim.core.utils.misc.OptionalTime;
+import org.matsim.vehicles.Vehicle;
 
 import java.util.ArrayList;
 
@@ -69,6 +70,7 @@ public final class FuryPlanCodec {
                 d.mode = l.getMode();
                 d.routingMode = l.getRoutingMode();
                 d.travelTime = toNullable(l.getTravelTime());
+                d.departureTime = toNullable(l.getDepartureTime());  // Added: serialize departureTime
                 if (l.getRoute() == null) {
                     d.routeTag = LegDTO.ROUTE_NONE;
                 } else if (l.getRoute() instanceof NetworkRoute nr) {
@@ -81,6 +83,7 @@ public final class FuryPlanCodec {
                     for (Id<Link> id : ids) r.linkIds.add(id.toString());
                     r.travelTime = toNullable(nr.getTravelTime());
                     r.distance = nr.getDistance();
+                    r.vehicleId = nr.getVehicleId() == null ? null : nr.getVehicleId().toString();  // Added: serialize vehicleId
                     d.network = r;
                 } else {
                     d.routeTag = LegDTO.ROUTE_GENERIC;
@@ -90,6 +93,7 @@ public final class FuryPlanCodec {
                     gr.travelTime = l.getRoute().getTravelTime() == null ? null : l.getRoute().getTravelTime().seconds();
                     gr.distance = l.getRoute().getDistance();
                     gr.description = l.getRoute().getRouteDescription();
+                    gr.vehicleId = l.getRoute().getVehicleId() == null ? null : l.getRoute().getVehicleId().toString();  // Added: serialize vehicleId
                     d.generic = gr;
                 }
                 out.elements.add(d);
@@ -119,6 +123,7 @@ public final class FuryPlanCodec {
             } else if (e instanceof LegDTO d) {
                 Leg l = factory.createLeg(d.mode);
                 if (d.travelTime != null) l.setTravelTime(d.travelTime);
+                if (d.departureTime != null) l.setDepartureTime(d.departureTime);  // Added: deserialize departureTime
                 if (d.routingMode != null) l.setRoutingMode(d.routingMode);
                 if (d.routeTag == LegDTO.ROUTE_NETWORK && d.network != null) {
                     var nr = RouteUtils.createLinkNetworkRouteImpl(
@@ -128,6 +133,7 @@ public final class FuryPlanCodec {
                     nr.setLinkIds(nr.getStartLinkId(), mid, nr.getEndLinkId());
                     if (d.network.travelTime != null) nr.setTravelTime(d.network.travelTime);
                     if (d.network.distance != null) nr.setDistance(d.network.distance);
+                    if (d.network.vehicleId != null) nr.setVehicleId(Id.createVehicleId(d.network.vehicleId));  // Added: deserialize vehicleId
                     l.setRoute(nr);
                 } else if (d.routeTag == LegDTO.ROUTE_GENERIC && d.generic != null) {
                     var startLink = d.generic.startLinkId != null ? Id.createLinkId(d.generic.startLinkId) : null;
@@ -136,6 +142,7 @@ public final class FuryPlanCodec {
                     if (d.generic.travelTime != null) gr.setTravelTime(d.generic.travelTime);
                     if (d.generic.distance != null) gr.setDistance(d.generic.distance);
                     gr.setRouteDescription(d.generic.description);
+                    if (d.generic.vehicleId != null) gr.setVehicleId(Id.createVehicleId(d.generic.vehicleId));  // Added: deserialize vehicleId
                     l.setRoute(gr);
                 }
                 plan.addLeg(l);

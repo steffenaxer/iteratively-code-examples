@@ -9,4 +9,5 @@ public final class NetworkRouteDTO {
     public List<String> linkIds;
     public Double travelTime;
     public Double distance;
+    public String vehicleId;  // Added: vehicle reference ID for the route
 }

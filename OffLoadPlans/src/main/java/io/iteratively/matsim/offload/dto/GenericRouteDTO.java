@@ -7,4 +7,5 @@ public final class GenericRouteDTO {
     public Double travelTime;
     public Double distance;
     public String description;
+    public String vehicleId;  // Added: vehicle reference ID for the route
 }
