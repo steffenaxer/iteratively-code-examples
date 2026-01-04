@@ -172,4 +172,50 @@ public class RocksDbPlanStoreTest {
         assertEquals(15.5, proxy.getScore(), 0.001);
         assertEquals(5, proxy.getIterationCreated());
     }
+    
+    @Test
+    public void testPlanLimitEnforcementUsesPersonPlanList() {
+        // This test validates the refactored plan limit enforcement
+        // which now uses the Person's actual plan list instead of cache
+        PopulationFactory pf = scenario.getPopulation().getFactory();
+        Person person = pf.createPerson(Id.createPersonId("person1"));
+        scenario.getPopulation().addPerson(person);
+        
+        // Create 8 plans (maxPlansPerAgent is 5)
+        for (int i = 0; i < 8; i++) {
+            Plan plan = pf.createPlan();
+            plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
+            plan.setScore(10.0 + i); // Scores: 10, 11, 12, 13, 14, 15, 16, 17
+            plan.getAttributes().putAttribute("offloadPlanId", "plan" + i);
+            person.addPlan(plan);
+            
+            store.putPlan("person1", "plan" + i, plan, 10.0 + i, 0, i == 0);
+        }
+        
+        // Load plans as proxies
+        OffloadSupport.loadAllPlansAsProxies(person, store);
+        
+        // Verify all 8 plans are loaded
+        assertEquals(8, person.getPlans().size(), "Should have 8 plans before commit");
+        
+        // Commit triggers plan limit enforcement
+        store.commit();
+        
+        // After commit, reload proxies to see what's left in store
+        person.getPlans().clear();
+        OffloadSupport.loadAllPlansAsProxies(person, store);
+        
+        // Should have only 5 plans left (maxPlansPerAgent)
+        assertEquals(5, person.getPlans().size(), "Should have only 5 plans after enforcement");
+        
+        // The 3 lowest-scoring plans (10, 11, 12) should be deleted
+        // The remaining plans should be 13, 14, 15, 16, 17
+        List<Double> scores = person.getPlans().stream()
+            .map(Plan::getScore)
+            .sorted()
+            .toList();
+        
+        assertEquals(13.0, scores.get(0), 0.001, "Lowest remaining score should be 13");
+        assertEquals(17.0, scores.get(4), 0.001, "Highest score should be 17");
+    }
 }
