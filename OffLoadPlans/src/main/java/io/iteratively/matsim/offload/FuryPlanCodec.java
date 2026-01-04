@@ -143,6 +143,14 @@ public final class FuryPlanCodec {
                     // Use PopulationFactory's route factories to get mode-specific route (like MATSim XML reading)
                     var route = factory.getRouteFactories().createRoute(d.mode, startLink, endLink);
                     
+                    // Verify we got the correct route type (important for specialized routes like DrtRoute, TransitPassengerRoute)
+                    if (d.generic.routeType != null && !route.getClass().getName().equals(d.generic.routeType)) {
+                        // Log warning: route factory returned different type than expected
+                        // This can happen if route factories aren't properly configured
+                        System.err.println("Warning: Expected route type " + d.generic.routeType + 
+                                         " but got " + route.getClass().getName() + " for mode " + d.mode);
+                    }
+                    
                     // Set common route properties
                     if (d.generic.travelTime != null) route.setTravelTime(d.generic.travelTime);
                     if (d.generic.distance != null) route.setDistance(d.generic.distance);
