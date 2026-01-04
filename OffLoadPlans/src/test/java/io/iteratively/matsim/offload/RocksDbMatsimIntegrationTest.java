@@ -284,7 +284,6 @@ public class RocksDbMatsimIntegrationTest {
             offloadConfig.setStorageBackend(backend);
             offloadConfig.setStoreDirectory(
                 new File(runConfig.controller().getOutputDirectory(), "store").toString());
-            offloadConfig.setCacheEntries(5);
             runConfig.addModule(offloadConfig);
         }
         
@@ -368,7 +367,6 @@ public class RocksDbMatsimIntegrationTest {
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
         offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "rocksdb-write-test").toString());
-        offloadConfig.setCacheEntries(3);
         config.addModule(offloadConfig);
         
         File dbDir = new File(offloadConfig.getStoreDirectory());

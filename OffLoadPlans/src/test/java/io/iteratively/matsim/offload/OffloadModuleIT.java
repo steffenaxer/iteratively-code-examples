@@ -31,7 +31,6 @@ public class OffloadModuleIT {
         File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
-        offloadConfig.setCacheEntries(2000);
         offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());

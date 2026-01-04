@@ -36,9 +36,7 @@ public class OffloadModuleExample {
         // Set directory for MapDB storage (will be created if it doesn't exist)
         File storeDir = new File("output/planstore");
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
-        
-        // Configure cache size (number of materialized plans to keep in memory)
-        offloadConfig.setCacheEntries(2000);
+
 
         // Standard MATSim configuration
         config.controller().setOutputDirectory("output");

@@ -44,7 +44,6 @@ public class OffloadModuleExampleTest {
         File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
-        offloadConfig.setCacheEntries(2000);
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
@@ -74,7 +73,6 @@ public class OffloadModuleExampleTest {
         File storeDir = new File(utils.getOutputDirectory(), "planstore");
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
-        offloadConfig.setCacheEntries(100);
 
         config.controller().setOutputDirectory(utils.getOutputDirectory());
         config.controller().setOverwriteFileSetting(
