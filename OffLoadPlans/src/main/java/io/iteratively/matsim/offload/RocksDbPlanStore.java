@@ -313,39 +313,71 @@ public final class RocksDbPlanStore implements PlanStore {
         }
     }
 
-    private int enforcePlanLimitLazy(String personId) {
-        List<String> ids = planIdCache.get(personId);
-        if (ids == null || ids.size() <= maxPlansPerAgent) return 0;
+    /**
+     * Enforces plan limit for a specific person based on their actual plan list.
+     * This ensures tight coupling between the Person's plans and PlanStore.
+     * The position/index in the Person's plan list acts as a unique identifier
+     * together with the personId.
+     */
+    private int enforcePlanLimitForPerson(Person person, String personId) {
+        List<Plan> plans = person.getPlans();
+        if (plans.size() <= maxPlansPerAgent) return 0;
 
-        String activeId = activePlanCache.get(personId);
+        Plan selectedPlan = person.getSelectedPlan();
 
-        List<Map.Entry<String, Double>> scored = new ArrayList<>(ids.size());
-        for (String pid : ids) {
-            if (!pid.equals(activeId)) {
-                PlanData data = getPlanData(personId, pid);
-                double score = data != null ? data.score : Double.NEGATIVE_INFINITY;
-                scored.add(Map.entry(pid, score));
+        // Collect all non-selected plans with their scores
+        List<Map.Entry<Plan, Double>> scored = new ArrayList<>(plans.size());
+        for (Plan plan : plans) {
+            if (plan != selectedPlan) {
+                Double score = plan.getScore();
+                double scoreValue = (score != null && !score.isNaN() && !score.isInfinite()) 
+                    ? score : Double.NEGATIVE_INFINITY;
+                scored.add(Map.entry(plan, scoreValue));
             }
         }
 
+        // Sort by score (lowest first, will be deleted)
         scored.sort(Comparator.comparingDouble(Map.Entry::getValue));
 
-        int toDelete = ids.size() - maxPlansPerAgent;
+        int toDelete = plans.size() - maxPlansPerAgent;
         int deleted = 0;
+        
+        // Delete lowest-scoring plans
         for (int i = 0; i < toDelete && i < scored.size(); i++) {
-            deletePlanInternal(personId, scored.get(i).getKey());
+            Plan planToDelete = scored.get(i).getKey();
+            
+            // Get planId from the plan (works for both PlanProxy and regular Plan)
+            String planId;
+            if (planToDelete instanceof PlanProxy proxy) {
+                planId = proxy.getPlanId();
+            } else {
+                // For regular plans, get the planId from attributes
+                Object attr = planToDelete.getAttributes().getAttribute("offloadPlanId");
+                if (attr instanceof String s) {
+                    planId = s;
+                } else {
+                    continue; // Skip plans without planId
+                }
+            }
+            
+            deletePlanInternal(personId, planId);
             deleted++;
         }
+        
         return deleted;
     }
 
     private void enforceAllPlanLimits() {
-        log.info("Enforcing plan limits for {} persons...", planIdCache.size());
+        var population = scenario.getPopulation();
+        log.info("Enforcing plan limits for {} persons...", population.getPersons().size());
         long start = System.currentTimeMillis();
         int deleted = 0;
 
-        for (String personId : new ArrayList<>(planIdCache.keySet())) {
-            deleted += enforcePlanLimitLazy(personId);
+        // Iterate over actual persons in the scenario to ensure tight coupling
+        // between Person's plan list and PlanStore
+        for (Person person : population.getPersons().values()) {
+            String personId = person.getId().toString();
+            deleted += enforcePlanLimitForPerson(person, personId);
         }
 
         if (deleted > 0) {
