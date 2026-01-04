@@ -24,7 +24,6 @@ public final class PlanMaterializationMonitor {
         int totalPlans = 0;
         int materializedPlans = 0;
         int proxyPlans = 0;
-        int unmaterializedProxies = 0;
         
         for (Person person : population.getPersons().values()) {
             for (Plan plan : person.getPlans()) {
@@ -33,8 +32,6 @@ public final class PlanMaterializationMonitor {
                     proxyPlans++;
                     if (proxy.isMaterialized()) {
                         materializedPlans++;
-                    } else {
-                        unmaterializedProxies++;
                     }
                 } else {
                     // Regular plans are considered materialized
@@ -52,7 +49,6 @@ public final class PlanMaterializationMonitor {
         stats.put("totalPlans", totalPlans);
         stats.put("materializedPlans", materializedPlans);
         stats.put("proxyPlans", proxyPlans);
-        stats.put("unmaterializedProxies", unmaterializedProxies);
         stats.put("materializationRate", String.format("%.2f%%", materializationRate));
         
         return stats;

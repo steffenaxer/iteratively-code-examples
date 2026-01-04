@@ -29,7 +29,6 @@ public class PlanMaterializationMonitorTest {
         assertEquals(0, stats.get("totalPlans"));
         assertEquals(0, stats.get("materializedPlans"));
         assertEquals(0, stats.get("proxyPlans"));
-        assertEquals(0, stats.get("unmaterializedProxies"));
         assertEquals("0.00%", stats.get("materializationRate"));
     }
 
@@ -55,7 +54,6 @@ public class PlanMaterializationMonitorTest {
         assertEquals(3, stats.get("totalPlans"));
         assertEquals(3, stats.get("materializedPlans")); // Regular plans are considered materialized
         assertEquals(0, stats.get("proxyPlans"));
-        assertEquals(0, stats.get("unmaterializedProxies"));
         assertEquals("100.00%", stats.get("materializationRate"));
     }
 
@@ -83,7 +81,6 @@ public class PlanMaterializationMonitorTest {
         assertEquals(4, stats.get("totalPlans"));
         assertEquals(4, stats.get("materializedPlans"));
         assertEquals(0, stats.get("proxyPlans"));
-        assertEquals(0, stats.get("unmaterializedProxies"));
         assertEquals("100.00%", stats.get("materializationRate"));
     }
 }
