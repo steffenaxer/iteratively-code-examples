@@ -268,73 +268,59 @@ public final class MapDbPlanStore implements PlanStore {
     }
 
     /**
-     * Enforces plan limit for a specific person based on their actual plan list.
-     * This ensures tight coupling between the Person's plans and PlanStore.
-     * The position/index in the Person's plan list acts as a unique identifier
-     * together with the personId.
+     * Synchronizes the store with the Person's plan list.
+     * The Person's plan list is the single source of truth - the store should only contain
+     * plans that are present in the Person's plan list.
+     * This method removes any orphaned plans from the store that are no longer in the Person.
      */
-    private int enforcePlanLimitForPerson(Person person, String personId) {
-        List<Plan> plans = person.getPlans();
-        if (plans.size() <= maxPlansPerAgent) return 0;
-
-        Plan selectedPlan = person.getSelectedPlan();
-
-        // Collect all non-selected plans with their scores
-        List<Map.Entry<Plan, Double>> scored = new ArrayList<>(plans.size());
-        for (Plan plan : plans) {
-            if (plan != selectedPlan) {
-                Double score = plan.getScore();
-                double scoreValue = OffloadSupport.toStorableScore(score);
-                scored.add(Map.entry(plan, scoreValue));
-            }
-        }
-
-        // Sort by score (lowest first, will be deleted)
-        scored.sort(Comparator.comparingDouble(Map.Entry::getValue));
-
-        int toDelete = plans.size() - maxPlansPerAgent;
-        int deleted = 0;
+    private int synchronizeWithPerson(Person person, String personId) {
+        List<Plan> personPlans = person.getPlans();
+        List<String> storedPlanIds = listPlanIds(personId);
         
-        // Delete lowest-scoring plans
-        for (int i = 0; i < toDelete && i < scored.size(); i++) {
-            Plan planToDelete = scored.get(i).getKey();
-            
-            // Get planId from the plan (works for both PlanProxy and regular Plan)
-            String planId;
-            if (planToDelete instanceof PlanProxy proxy) {
+        // Collect planIds that are currently in the Person
+        Set<String> activePlanIds = new HashSet<>();
+        for (Plan plan : personPlans) {
+            String planId = null;
+            if (plan instanceof PlanProxy proxy) {
                 planId = proxy.getPlanId();
             } else {
                 // For regular plans, get the planId from attributes
-                Object attr = planToDelete.getAttributes().getAttribute("offloadPlanId");
+                Object attr = plan.getAttributes().getAttribute("offloadPlanId");
                 if (attr instanceof String s) {
                     planId = s;
-                } else {
-                    continue; // Skip plans without planId
                 }
             }
-            
-            deletePlanInternal(personId, planId);
-            deleted++;
+            if (planId != null) {
+                activePlanIds.add(planId);
+            }
+        }
+        
+        // Delete plans from store that are not in Person's plan list
+        int deleted = 0;
+        for (String storedPlanId : storedPlanIds) {
+            if (!activePlanIds.contains(storedPlanId)) {
+                deletePlanInternal(personId, storedPlanId);
+                deleted++;
+            }
         }
         
         return deleted;
     }
 
-    private void enforceAllPlanLimits() {
+    private void synchronizeStoreWithPopulation() {
         var population = scenario.getPopulation();
-        log.info("Enforcing plan limits for {} persons...", population.getPersons().size());
+        log.info("Synchronizing store with population ({} persons)...", population.getPersons().size());
         long start = System.currentTimeMillis();
         int deleted = 0;
 
-        // Iterate over actual persons in the scenario to ensure tight coupling
-        // between Person's plan list and PlanStore
+        // Ensure store only contains plans that exist in each Person's plan list
         for (Person person : population.getPersons().values()) {
             String personId = person.getId().toString();
-            deleted += enforcePlanLimitForPerson(person, personId);
+            deleted += synchronizeWithPerson(person, personId);
         }
 
         if (deleted > 0) {
-            log.info("Deleted {} excess plans in {} ms", deleted, System.currentTimeMillis() - start);
+            log.info("Removed {} orphaned plans in {} ms", deleted, System.currentTimeMillis() - start);
         }
     }
 
@@ -427,7 +413,7 @@ public final class MapDbPlanStore implements PlanStore {
         synchronized (pendingWrites) {
             flushPendingWrites();
         }
-        enforceAllPlanLimits();
+        synchronizeStoreWithPopulation();
     }
 
     @Override

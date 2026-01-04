@@ -174,48 +174,48 @@ public class RocksDbPlanStoreTest {
     }
     
     @Test
-    public void testPlanLimitEnforcementUsesPersonPlanList() {
-        // This test validates the refactored plan limit enforcement
-        // which now uses the Person's actual plan list instead of cache
+    public void testStoreSynchronizesWithPersonPlanList() {
+        // This test validates that the store synchronizes with Person's plan list
+        // The Person's plan list is the single source of truth
         PopulationFactory pf = scenario.getPopulation().getFactory();
         Person person = pf.createPerson(Id.createPersonId("person1"));
         scenario.getPopulation().addPerson(person);
         
-        // Create 8 plans (maxPlansPerAgent is 5)
-        for (int i = 0; i < 8; i++) {
+        // Create and store 5 plans
+        for (int i = 0; i < 5; i++) {
             Plan plan = pf.createPlan();
             plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
-            plan.setScore(10.0 + i); // Scores: 10, 11, 12, 13, 14, 15, 16, 17
+            plan.setScore(10.0 + i);
             plan.getAttributes().putAttribute("offloadPlanId", "plan" + i);
             person.addPlan(plan);
             
             store.putPlan("person1", "plan" + i, plan, 10.0 + i, 0, i == 0);
         }
         
+        // Verify all 5 plans are stored
+        assertEquals(5, store.listPlanIds("person1").size(), "Should have 5 plans in store");
+        
         // Load plans as proxies
         OffloadSupport.loadAllPlansAsProxies(person, store);
+        assertEquals(5, person.getPlans().size(), "Should have 5 plans in Person");
         
-        // Verify all 8 plans are loaded
-        assertEquals(8, person.getPlans().size(), "Should have 8 plans before commit");
+        // Now remove 2 plans from the Person (simulating MATSim's plan selection/removal)
+        person.getPlans().remove(4); // Remove plan4
+        person.getPlans().remove(3); // Remove plan3
+        assertEquals(3, person.getPlans().size(), "Should have 3 plans in Person after removal");
         
-        // Commit triggers plan limit enforcement
+        // Commit should synchronize store with Person - removing orphaned plans
         store.commit();
         
-        // After commit, reload proxies to see what's left in store
-        person.getPlans().clear();
-        OffloadSupport.loadAllPlansAsProxies(person, store);
+        // Store should now only have the 3 plans that are in Person
+        List<String> remainingIds = store.listPlanIds("person1");
+        assertEquals(3, remainingIds.size(), "Store should have 3 plans after synchronization");
         
-        // Should have only 5 plans left (maxPlansPerAgent)
-        assertEquals(5, person.getPlans().size(), "Should have only 5 plans after enforcement");
-        
-        // The 3 lowest-scoring plans (10, 11, 12) should be deleted
-        // The remaining plans should be 13, 14, 15, 16, 17
-        List<Double> scores = person.getPlans().stream()
-            .map(Plan::getScore)
-            .sorted()
-            .toList();
-        
-        assertEquals(13.0, scores.get(0), 0.001, "Lowest remaining score should be 13");
-        assertEquals(17.0, scores.get(4), 0.001, "Highest score should be 17");
+        // Verify the correct plans remain (plan0, plan1, plan2)
+        assertTrue(remainingIds.contains("plan0"), "plan0 should remain");
+        assertTrue(remainingIds.contains("plan1"), "plan1 should remain");
+        assertTrue(remainingIds.contains("plan2"), "plan2 should remain");
+        assertFalse(remainingIds.contains("plan3"), "plan3 should be removed");
+        assertFalse(remainingIds.contains("plan4"), "plan4 should be removed");
     }
 }
