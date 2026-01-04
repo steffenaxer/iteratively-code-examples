@@ -115,6 +115,7 @@ public final class FuryPlanCodec {
             } else if (e instanceof LegDTO d) {
                 Leg l = factory.createLeg(d.mode);
                 if (d.travelTime != null) l.setTravelTime(d.travelTime);
+                if (d.departureTime != null) l.setDepartureTime(d.departureTime);
                 if (d.routingMode != null) l.setRoutingMode(d.routingMode);
                 if (d.routeTag == LegDTO.ROUTE_NETWORK && d.network != null) {
                     var nr = RouteUtils.createLinkNetworkRouteImpl(

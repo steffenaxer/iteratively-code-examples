@@ -8,6 +8,7 @@ public final class LegDTO implements PlanElementDTO {
 
     public String mode;
     public String routingMode;
+    public Double departureTime;
     public Double travelTime;
     public byte routeTag;
     public NetworkRouteDTO network;   // if routeTag==NETWORK
