@@ -93,6 +93,7 @@ public final class FuryPlanCodec {
                     gr.travelTime = l.getRoute().getTravelTime() == null ? null : l.getRoute().getTravelTime().seconds();
                     gr.distance = l.getRoute().getDistance();
                     gr.description = l.getRoute().getRouteDescription();
+                    gr.routeType = l.getRoute().getClass().getName();  // Store route class name for specialized routes
                     // Note: GenericRoute does not support vehicleId in MATSim
                     d.generic = gr;
                 }
@@ -138,12 +139,17 @@ public final class FuryPlanCodec {
                 } else if (d.routeTag == LegDTO.ROUTE_GENERIC && d.generic != null) {
                     var startLink = d.generic.startLinkId != null ? Id.createLinkId(d.generic.startLinkId) : null;
                     var endLink = d.generic.endLinkId != null ? Id.createLinkId(d.generic.endLinkId) : null;
-                    var gr = RouteUtils.createGenericRouteImpl(startLink, endLink);
-                    if (d.generic.travelTime != null) gr.setTravelTime(d.generic.travelTime);
-                    if (d.generic.distance != null) gr.setDistance(d.generic.distance);
-                    gr.setRouteDescription(d.generic.description);
-                    // Note: GenericRoute does not support vehicleId in MATSim
-                    l.setRoute(gr);
+                    
+                    // Use PopulationFactory's route factories to get mode-specific route (like MATSim XML reading)
+                    var route = factory.getRouteFactories().createRoute(d.mode, startLink, endLink);
+                    
+                    // Set common route properties
+                    if (d.generic.travelTime != null) route.setTravelTime(d.generic.travelTime);
+                    if (d.generic.distance != null) route.setDistance(d.generic.distance);
+                    if (d.generic.description != null) route.setRouteDescription(d.generic.description);
+                    
+                    // Note: GenericRoute and specialized routes do not support vehicleId in MATSim (only NetworkRoute does)
+                    l.setRoute(route);
                 }
                 plan.addLeg(l);
             } else {
