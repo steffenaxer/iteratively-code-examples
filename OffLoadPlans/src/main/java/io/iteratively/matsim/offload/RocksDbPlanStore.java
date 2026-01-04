@@ -318,26 +318,10 @@ public final class RocksDbPlanStore implements PlanStore {
      * This method removes any orphaned plans from the store that are no longer in the Person.
      */
     private int synchronizeWithPerson(Person person, String personId) {
-        List<Plan> personPlans = person.getPlans();
         List<String> storedPlanIds = listPlanIds(personId);
         
         // Collect planIds that are currently in the Person
-        Set<String> activePlanIds = new HashSet<>();
-        for (Plan plan : personPlans) {
-            String planId = null;
-            if (plan instanceof PlanProxy proxy) {
-                planId = proxy.getPlanId();
-            } else {
-                // For regular plans, get the planId from attributes
-                Object attr = plan.getAttributes().getAttribute("offloadPlanId");
-                if (attr instanceof String s) {
-                    planId = s;
-                }
-            }
-            if (planId != null) {
-                activePlanIds.add(planId);
-            }
-        }
+        Set<String> activePlanIds = OffloadSupport.collectActivePlanIds(person);
         
         // Delete plans from store that are not in Person's plan list
         int deleted = 0;

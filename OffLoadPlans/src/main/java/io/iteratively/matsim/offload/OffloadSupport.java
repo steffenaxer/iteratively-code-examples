@@ -162,4 +162,36 @@ public final class OffloadSupport {
         plan.getAttributes().putAttribute("offloadPlanId", pid);
         return pid;
     }
+
+    /**
+     * Extracts the planId from a Plan object.
+     * Handles both PlanProxy and regular Plan instances.
+     * @return planId if available, null otherwise
+     */
+    public static String getPlanId(Plan plan) {
+        if (plan instanceof PlanProxy proxy) {
+            return proxy.getPlanId();
+        } else {
+            Object attr = plan.getAttributes().getAttribute("offloadPlanId");
+            if (attr instanceof String s) {
+                return s;
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Collects all planIds from a Person's plan list.
+     * Only includes plans that have a planId assigned.
+     */
+    public static Set<String> collectActivePlanIds(Person person) {
+        Set<String> activePlanIds = new HashSet<>();
+        for (Plan plan : person.getPlans()) {
+            String planId = getPlanId(plan);
+            if (planId != null) {
+                activePlanIds.add(planId);
+            }
+        }
+        return activePlanIds;
+    }
 }
