@@ -36,7 +36,7 @@ public final class PlanProxy implements Plan {
         this.creationIter = header.creationIter;
         // NaN als null behandeln
         this.score = isValidScore(header.score) ? header.score : null;
-        // Initialize to 0; setCurrentIteration() must be called after construction
+        // Initialize to 0; caller must call setCurrentIteration() before using this proxy
         this.currentIteration = 0;
     }
 
@@ -49,7 +49,8 @@ public final class PlanProxy implements Plan {
         this.creationIter = creationIter;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
-        // For newly created plans, initialize to creationIter (the plan is created in the current iteration)
+        // For newly created plans, currentIteration is set to creationIter since
+        // the plan is being created in the current iteration
         this.currentIteration = creationIter;
     }
 
@@ -63,8 +64,14 @@ public final class PlanProxy implements Plan {
     
     /**
      * Sets the current iteration for this proxy.
-     * This should be called at the start of each iteration to ensure
-     * that score updates are persisted with the correct iteration number.
+     * <p>
+     * This method MUST be called:
+     * <ul>
+     *   <li>After constructing a proxy from a PlanHeader (before any score updates)</li>
+     *   <li>At the start of each iteration when proxies are loaded from the store</li>
+     * </ul>
+     * Failing to call this method will result in incorrect lastUsedIter values
+     * in the plan store when scores are updated.
      * 
      * @param iteration the current iteration number
      */
