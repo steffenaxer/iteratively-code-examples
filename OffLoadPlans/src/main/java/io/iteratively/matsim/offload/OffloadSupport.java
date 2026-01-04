@@ -72,19 +72,7 @@ public final class OffloadSupport {
         }
     }
 
-    public static void addNewPlan(Person p, Plan plan, PlanStore store, int iter) {
-        String personId = p.getId().toString();
-        String planId = ensurePlanId(plan);
-        double score = toStorableScore(plan.getScore());
-
-        store.putPlan(personId, planId, plan, score, iter, false);
-        markPersisted(plan);
-
-        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, plan.getScore());
-        p.addPlan(proxy);
-    }
-
-    public static void ensureSelectedMaterialized(Person p, PlanStore store, PlanCache cache) {
+    public static void ensureSelectedMaterialized(Person p) {
         Plan selected = p.getSelectedPlan();
         if (selected == null) return;
 

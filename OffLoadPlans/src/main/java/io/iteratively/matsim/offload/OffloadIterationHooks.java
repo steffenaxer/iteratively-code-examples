@@ -13,12 +13,10 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
     private static final Logger log = LogManager.getLogger(OffloadIterationHooks.class);
 
     private final PlanStore store;
-    private final PlanCache cache;
 
     @Inject
-    public OffloadIterationHooks(PlanStore store, PlanCache cache) {
+    public OffloadIterationHooks(PlanStore store) {
         this.store = store;
-        this.cache = cache;
     }
 
     @Override
@@ -43,7 +41,7 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
 
         // Ensure selected plan is materialized for simulation
         for (Person p : pop.getPersons().values()) {
-            OffloadSupport.ensureSelectedMaterialized(p, store, cache);
+            OffloadSupport.ensureSelectedMaterialized(p);
         }
 
         store.commit();
@@ -61,7 +59,6 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
         }
 
         store.commit();
-        cache.evictAll();
 
         log.info("Iteration {}: Plan offload completed", iter);
     }

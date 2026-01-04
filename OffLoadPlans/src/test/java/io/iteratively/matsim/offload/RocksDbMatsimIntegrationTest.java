@@ -193,7 +193,7 @@ public class RocksDbMatsimIntegrationTest {
         // Create fresh config and scenario for each run
         Config runConfig = ConfigUtils.createConfig();
         runConfig.controller().setFirstIteration(0);
-        runConfig.controller().setLastIteration(5);  // 6 iterations
+        runConfig.controller().setLastIteration(10);  // 11 iterations
         runConfig.controller().setOutputDirectory(
             new File(utils.getOutputDirectory(), subfolder).toString());
         runConfig.controller().setOverwriteFileSetting(
