@@ -36,8 +36,8 @@ public final class PlanProxy implements Plan {
         this.creationIter = header.creationIter;
         // NaN als null behandeln
         this.score = isValidScore(header.score) ? header.score : null;
-        // Initialize with lastUsedIter from header
-        this.currentIteration = header.lastUsedIter;
+        // Initialize to 0; setCurrentIteration() must be called after construction
+        this.currentIteration = 0;
     }
 
     public PlanProxy(String planId, Person person, PlanStore store, String type,
@@ -49,7 +49,7 @@ public final class PlanProxy implements Plan {
         this.creationIter = creationIter;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
-        // For new plans, current iteration equals creation iteration
+        // For newly created plans, initialize to creationIter (the plan is created in the current iteration)
         this.currentIteration = creationIter;
     }
 
