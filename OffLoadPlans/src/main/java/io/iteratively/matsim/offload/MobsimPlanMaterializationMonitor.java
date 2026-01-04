@@ -95,7 +95,7 @@ public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimSt
         }
         
         // Warn if too many non-selected plans are materialized
-        if (stats.nonSelectedMaterializedPlans() > 0) {
+        if (stats.nonSelectedMaterializedPlans() > 0 && stats.materializedPlans() > 0) {
             double nonSelectedRate = (stats.nonSelectedMaterializedPlans() * 100.0) / stats.materializedPlans();
             log.warn("MobSim at t={}s: Found {} non-selected materialized plans ({} % of materialized) - " +
                     "consider enabling auto-dematerialization or reducing maxNonSelectedMaterializationTimeMs", 
