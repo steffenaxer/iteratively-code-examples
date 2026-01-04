@@ -10,11 +10,11 @@ public final class OffloadSupport {
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
 
-    private static boolean isValidScore(Double score) {
+    public static boolean isValidScore(Double score) {
         return score != null && !score.isNaN() && !score.isInfinite();
     }
 
-    private static double toStorableScore(Double score) {
+    public static double toStorableScore(Double score) {
         return isValidScore(score) ? score : Double.NEGATIVE_INFINITY;
     }
 

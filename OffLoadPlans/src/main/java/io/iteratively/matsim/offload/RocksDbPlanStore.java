@@ -330,8 +330,7 @@ public final class RocksDbPlanStore implements PlanStore {
         for (Plan plan : plans) {
             if (plan != selectedPlan) {
                 Double score = plan.getScore();
-                double scoreValue = (score != null && !score.isNaN() && !score.isInfinite()) 
-                    ? score : Double.NEGATIVE_INFINITY;
+                double scoreValue = OffloadSupport.toStorableScore(score);
                 scored.add(Map.entry(plan, scoreValue));
             }
         }
