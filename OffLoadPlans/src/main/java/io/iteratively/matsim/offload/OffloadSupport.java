@@ -3,7 +3,9 @@ package io.iteratively.matsim.offload;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class OffloadSupport {
     private OffloadSupport() {}
