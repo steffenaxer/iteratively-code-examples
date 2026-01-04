@@ -372,7 +372,7 @@ public class RocksDbMatsimIntegrationTest {
         File dbDir = new File(offloadConfig.getStoreDirectory());
         dbDir.mkdirs();
         
-        RocksDbPlanStore store = new RocksDbPlanStore(dbDir, scenario, 3);
+        RocksDbPlanStore store = new RocksDbPlanStore(dbDir, scenario);
         
         try {
             Population population = scenario.getPopulation();

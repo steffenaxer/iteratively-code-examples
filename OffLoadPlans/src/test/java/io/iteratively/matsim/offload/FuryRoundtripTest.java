@@ -30,7 +30,7 @@ public class FuryRoundtripTest {
         person.setSelectedPlan(plan);
 
         File db = new File("target/plans.mapdb");
-        MapDbPlanStore store = new MapDbPlanStore(db, sc, sc.getConfig().replanning().getMaxAgentPlanMemorySize());
+        MapDbPlanStore store = new MapDbPlanStore(db, sc);
         store.putPlan("1", "p0", plan, plan.getScore(), 0, true);
 
         var proxies = store.listPlanProxies(person);

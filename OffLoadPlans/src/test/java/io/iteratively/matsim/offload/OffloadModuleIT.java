@@ -57,8 +57,7 @@ public class OffloadModuleIT {
         assertTrue(rocksDbDir.exists(), "RocksDB directory should exist");
         assertTrue(rocksDbDir.isDirectory(), "RocksDB store should be a directory");
 
-        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario,
-                scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             int storedPlans = 0;
             for (Person person : scenario.getPopulation().getPersons().values()) {
                 var proxies = store.listPlanProxies(person);
@@ -90,8 +89,7 @@ public class OffloadModuleIT {
 
         File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
 
-        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario,
-                scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
+        try (MapDbPlanStore store = new MapDbPlanStore(dbFile, scenario)) {
             String firstPersonId = scenario.getPopulation().getPersons().keySet()
                     .iterator().next().toString();
             Person firstPerson = scenario.getPopulation().getPersons().get(

@@ -3,18 +3,20 @@ package io.iteratively.matsim.offload;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class OffloadSupport {
     private OffloadSupport() {}
 
     public record PersistTask(String personId, String planId, byte[] blob, double score) {}
 
-    private static boolean isValidScore(Double score) {
+    public static boolean isValidScore(Double score) {
         return score != null && !score.isNaN() && !score.isInfinite();
     }
 
-    private static double toStorableScore(Double score) {
+    public static double toStorableScore(Double score) {
         return isValidScore(score) ? score : Double.NEGATIVE_INFINITY;
     }
 
@@ -161,5 +163,45 @@ public final class OffloadSupport {
         String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());
         plan.getAttributes().putAttribute("offloadPlanId", pid);
         return pid;
+    }
+
+    /**
+     * Extracts the planId from a Plan object.
+     * Handles both PlanProxy and regular Plan instances.
+     * 
+     * @param plan the Plan to extract planId from
+     * @return planId if available, null if the plan doesn't have a planId assigned
+     *         (typically happens for regular Plans that haven't been persisted yet)
+     */
+    public static String getPlanId(Plan plan) {
+        if (plan instanceof PlanProxy proxy) {
+            return proxy.getPlanId();
+        } else {
+            Object attr = plan.getAttributes().getAttribute("offloadPlanId");
+            if (attr instanceof String s) {
+                return s;
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Collects all planIds from a Person's plan list.
+     * Only includes plans that have a planId assigned (i.e., plans that have been
+     * persisted to the store or are PlanProxy instances).
+     * 
+     * @param person the Person whose plan IDs should be collected
+     * @return Set of planIds for all plans in the Person that have IDs.
+     *         Plans without planIds are filtered out (not included in the result).
+     */
+    public static Set<String> collectActivePlanIds(Person person) {
+        Set<String> activePlanIds = new HashSet<>();
+        for (Plan plan : person.getPlans()) {
+            String planId = getPlanId(plan);
+            if (planId != null) {
+                activePlanIds.add(planId);
+            }
+        }
+        return activePlanIds;
     }
 }

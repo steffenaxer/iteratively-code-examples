@@ -23,7 +23,6 @@ public final class MapDbPlanStore implements PlanStore {
     private final HTreeMap<String, String> planIndexByPerson;
 
     private final FuryPlanCodec codec;
-    private final int maxPlansPerAgent;
     private final Scenario scenario;
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
@@ -80,8 +79,7 @@ public final class MapDbPlanStore implements PlanStore {
         }
     }
 
-    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
-        this.maxPlansPerAgent = maxPlansPerAgent;
+    public MapDbPlanStore(File file, Scenario scenario) {
         this.scenario = scenario;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
@@ -267,43 +265,44 @@ public final class MapDbPlanStore implements PlanStore {
         log.info("Flush completed in {} ms (wrote {} plans)", System.currentTimeMillis() - start, latestByKey.size());
     }
 
-    private int enforcePlanLimitLazy(String personId) {
-        List<String> ids = planIdCache.get(personId);
-        if (ids == null || ids.size() <= maxPlansPerAgent) return 0;
-
-        String activeId = activePlanCache.get(personId);
-
-        List<Map.Entry<String, Double>> scored = new ArrayList<>(ids.size());
-        for (String pid : ids) {
-            if (!pid.equals(activeId)) {
-                PlanData data = getPlanData(personId, pid);
-                double score = data != null ? data.score : Double.NEGATIVE_INFINITY;
-                scored.add(Map.entry(pid, score));
+    /**
+     * Synchronizes the store with the Person's plan list.
+     * The Person's plan list is the single source of truth - the store should only contain
+     * plans that are present in the Person's plan list.
+     * This method removes any orphaned plans from the store that are no longer in the Person.
+     */
+    private int synchronizeWithPerson(Person person, String personId) {
+        List<String> storedPlanIds = listPlanIds(personId);
+        
+        // Collect planIds that are currently in the Person
+        Set<String> activePlanIds = OffloadSupport.collectActivePlanIds(person);
+        
+        // Delete plans from store that are not in Person's plan list
+        int deleted = 0;
+        for (String storedPlanId : storedPlanIds) {
+            if (!activePlanIds.contains(storedPlanId)) {
+                deletePlanInternal(personId, storedPlanId);
+                deleted++;
             }
         }
-
-        scored.sort(Comparator.comparingDouble(Map.Entry::getValue));
-
-        int toDelete = ids.size() - maxPlansPerAgent;
-        int deleted = 0;
-        for (int i = 0; i < toDelete && i < scored.size(); i++) {
-            deletePlanInternal(personId, scored.get(i).getKey());
-            deleted++;
-        }
+        
         return deleted;
     }
 
-    private void enforceAllPlanLimits() {
-        log.info("Enforcing plan limits for {} persons...", planIdCache.size());
+    private void synchronizeStoreWithPopulation() {
+        var population = scenario.getPopulation();
+        log.info("Synchronizing store with population ({} persons)...", population.getPersons().size());
         long start = System.currentTimeMillis();
         int deleted = 0;
 
-        for (String personId : new ArrayList<>(planIdCache.keySet())) {
-            deleted += enforcePlanLimitLazy(personId);
+        // Ensure store only contains plans that exist in each Person's plan list
+        for (Person person : population.getPersons().values()) {
+            String personId = person.getId().toString();
+            deleted += synchronizeWithPerson(person, personId);
         }
 
         if (deleted > 0) {
-            log.info("Deleted {} excess plans in {} ms", deleted, System.currentTimeMillis() - start);
+            log.info("Removed {} orphaned plans in {} ms", deleted, System.currentTimeMillis() - start);
         }
     }
 
@@ -396,7 +395,7 @@ public final class MapDbPlanStore implements PlanStore {
         synchronized (pendingWrites) {
             flushPendingWrites();
         }
-        enforceAllPlanLimits();
+        synchronizeStoreWithPopulation();
     }
 
     @Override

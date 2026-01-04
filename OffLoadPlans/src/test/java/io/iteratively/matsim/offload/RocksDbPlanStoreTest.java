@@ -30,7 +30,7 @@ public class RocksDbPlanStoreTest {
         scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         File dbDir = new File(utils.getOutputDirectory(), "rocksdb");
         dbDir.mkdirs();
-        store = new RocksDbPlanStore(dbDir, scenario, 5);
+        store = new RocksDbPlanStore(dbDir, scenario);
     }
     
     @AfterEach
@@ -171,5 +171,51 @@ public class RocksDbPlanStoreTest {
         assertEquals("plan1", proxy.getPlanId());
         assertEquals(15.5, proxy.getScore(), 0.001);
         assertEquals(5, proxy.getIterationCreated());
+    }
+    
+    @Test
+    public void testStoreSynchronizesWithPersonPlanList() {
+        // This test validates that the store synchronizes with Person's plan list
+        // The Person's plan list is the single source of truth
+        PopulationFactory pf = scenario.getPopulation().getFactory();
+        Person person = pf.createPerson(Id.createPersonId("person1"));
+        scenario.getPopulation().addPerson(person);
+        
+        // Create and store 5 plans
+        for (int i = 0; i < 5; i++) {
+            Plan plan = pf.createPlan();
+            plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
+            plan.setScore(10.0 + i);
+            plan.getAttributes().putAttribute("offloadPlanId", "plan" + i);
+            person.addPlan(plan);
+            
+            store.putPlan("person1", "plan" + i, plan, 10.0 + i, 0, i == 0);
+        }
+        
+        // Verify all 5 plans are stored
+        assertEquals(5, store.listPlanIds("person1").size(), "Should have 5 plans in store");
+        
+        // Load plans as proxies
+        OffloadSupport.loadAllPlansAsProxies(person, store);
+        assertEquals(5, person.getPlans().size(), "Should have 5 plans in Person");
+        
+        // Now remove 2 plans from the Person (simulating MATSim's plan selection/removal)
+        person.getPlans().remove(4); // Remove plan4
+        person.getPlans().remove(3); // Remove plan3
+        assertEquals(3, person.getPlans().size(), "Should have 3 plans in Person after removal");
+        
+        // Commit should synchronize store with Person - removing orphaned plans
+        store.commit();
+        
+        // Store should now only have the 3 plans that are in Person
+        List<String> remainingIds = store.listPlanIds("person1");
+        assertEquals(3, remainingIds.size(), "Store should have 3 plans after synchronization");
+        
+        // Verify the correct plans remain (plan0, plan1, plan2)
+        assertTrue(remainingIds.contains("plan0"), "plan0 should remain");
+        assertTrue(remainingIds.contains("plan1"), "plan1 should remain");
+        assertTrue(remainingIds.contains("plan2"), "plan2 should remain");
+        assertFalse(remainingIds.contains("plan3"), "plan3 should be removed");
+        assertFalse(remainingIds.contains("plan4"), "plan4 should be removed");
     }
 }

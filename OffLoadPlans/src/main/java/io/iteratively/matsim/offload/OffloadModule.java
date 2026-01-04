@@ -27,7 +27,6 @@ public final class OffloadModule extends AbstractModule {
     PlanStore providePlanStore(Scenario scenario) {
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(
                 scenario.getConfig(), OffloadConfigGroup.class);
-        int maxPlans = scenario.getConfig().replanning().getMaxAgentPlanMemorySize();
 
         File baseDir;
         if (offloadConfig.getStoreDirectory() != null) {
@@ -41,12 +40,12 @@ public final class OffloadModule extends AbstractModule {
         return switch (offloadConfig.getStorageBackend()) {
             case MAPDB -> {
                 File dbFile = new File(baseDir, OffloadConfigGroup.DB_FILE_NAME);
-                yield new MapDbPlanStore(dbFile, scenario, maxPlans);
+                yield new MapDbPlanStore(dbFile, scenario);
             }
             case ROCKSDB -> {
                 File rocksDir = new File(baseDir, "rocksdb");
                 rocksDir.mkdirs();
-                yield new RocksDbPlanStore(rocksDir, scenario, maxPlans);
+                yield new RocksDbPlanStore(rocksDir, scenario);
             }
         };
     }
