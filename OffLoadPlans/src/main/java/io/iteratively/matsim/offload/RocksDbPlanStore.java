@@ -3,6 +3,7 @@ package io.iteratively.matsim.offload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.matsim.api.core.v01.Scenario;
+import org.matsim.api.core.v01.population.Person;
 import org.matsim.api.core.v01.population.Plan;
 import org.rocksdb.*;
 
@@ -173,7 +174,8 @@ public final class RocksDbPlanStore implements PlanStore {
     }
 
     @Override
-    public List<PlanHeader> listPlanHeaders(String personId) {
+    public List<PlanProxy> listPlanProxies(Person person) {
+        String personId = person.getId().toString();
         List<String> ids = listPlanIds(personId);
         if (ids.isEmpty()) return List.of();
 
@@ -182,12 +184,13 @@ public final class RocksDbPlanStore implements PlanStore {
             activeId = getActivePlanId(personId).orElse(null);
         }
 
-        List<PlanHeader> out = new ArrayList<>(ids.size());
+        List<PlanProxy> out = new ArrayList<>(ids.size());
         for (String pid : ids) {
             PlanData data = getPlanData(personId, pid);
             if (data != null) {
                 boolean sel = pid.equals(activeId);
-                out.add(new PlanHeader(pid, data.score, data.type, data.creationIter, data.lastUsedIter, sel));
+                PlanProxy proxy = new PlanProxy(pid, person, this, data.type, data.creationIter, data.score, sel);
+                out.add(proxy);
             }
         }
         return out;

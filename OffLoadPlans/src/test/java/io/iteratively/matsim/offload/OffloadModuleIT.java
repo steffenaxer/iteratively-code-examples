@@ -2,6 +2,7 @@ package io.iteratively.matsim.offload;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+import org.matsim.api.core.v01.Id;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.population.Person;
 import org.matsim.core.config.Config;
@@ -61,8 +62,8 @@ public class OffloadModuleIT {
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             int storedPlans = 0;
             for (Person person : scenario.getPopulation().getPersons().values()) {
-                var headers = store.listPlanHeaders(person.getId().toString());
-                storedPlans += headers.size();
+                var proxies = store.listPlanProxies(person);
+                storedPlans += proxies.size();
             }
             assertTrue(storedPlans > 0, "Plans should be stored in the store");
         }
@@ -94,12 +95,14 @@ public class OffloadModuleIT {
                 scenario.getConfig().replanning().getMaxAgentPlanMemorySize())) {
             String firstPersonId = scenario.getPopulation().getPersons().keySet()
                     .iterator().next().toString();
+            Person firstPerson = scenario.getPopulation().getPersons().get(
+                    Id.createPersonId(firstPersonId));
 
-            var headers = store.listPlanHeaders(firstPersonId);
-            assertFalse(headers.isEmpty(), "Person should have at least one plan");
+            var proxies = store.listPlanProxies(firstPerson);
+            assertFalse(proxies.isEmpty(), "Person should have at least one plan");
 
-            var header = headers.get(0);
-            var plan = store.materialize(firstPersonId, header.planId);
+            var proxy = proxies.get(0);
+            var plan = store.materialize(firstPersonId, proxy.getPlanId());
 
             assertNotNull(plan, "Materialized plan should not be null");
             assertFalse(plan.getPlanElements().isEmpty(), "Plan should contain elements");
