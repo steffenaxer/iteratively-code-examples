@@ -93,7 +93,7 @@ public final class FuryPlanCodec {
                     gr.travelTime = l.getRoute().getTravelTime() == null ? null : l.getRoute().getTravelTime().seconds();
                     gr.distance = l.getRoute().getDistance();
                     gr.description = l.getRoute().getRouteDescription();
-                    gr.vehicleId = l.getRoute().getVehicleId() == null ? null : l.getRoute().getVehicleId().toString();  // Added: serialize vehicleId
+                    // Note: GenericRoute does not support vehicleId in MATSim
                     d.generic = gr;
                 }
                 out.elements.add(d);
@@ -142,7 +142,7 @@ public final class FuryPlanCodec {
                     if (d.generic.travelTime != null) gr.setTravelTime(d.generic.travelTime);
                     if (d.generic.distance != null) gr.setDistance(d.generic.distance);
                     gr.setRouteDescription(d.generic.description);
-                    if (d.generic.vehicleId != null) gr.setVehicleId(Id.createVehicleId(d.generic.vehicleId));  // Added: deserialize vehicleId
+                    // Note: GenericRoute does not support vehicleId in MATSim
                     l.setRoute(gr);
                 }
                 plan.addLeg(l);
