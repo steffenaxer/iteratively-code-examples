@@ -140,17 +140,25 @@ public final class FuryPlanCodec {
                     var startLink = d.generic.startLinkId != null ? Id.createLinkId(d.generic.startLinkId) : null;
                     var endLink = d.generic.endLinkId != null ? Id.createLinkId(d.generic.endLinkId) : null;
                     
-                    // Use PopulationFactory's route factories to get mode-specific route (like MATSim XML reading)
-                    // First get the RouteFactory for this mode, then create the route
-                    var routeFactory = factory.getRouteFactories().getFactory(d.mode);
-                    var route = routeFactory.createRoute(startLink, endLink);
+                    org.matsim.api.core.v01.population.Route route;
                     
-                    // Verify we got the correct route type (important for specialized routes like DrtRoute, TransitPassengerRoute)
-                    if (d.generic.routeType != null && !route.getClass().getName().equals(d.generic.routeType)) {
-                        // Log warning: route factory returned different type than expected
-                        // This can happen if route factories aren't properly configured
-                        System.err.println("Warning: Expected route type " + d.generic.routeType + 
-                                         " but got " + route.getClass().getName() + " for mode " + d.mode);
+                    // If we have the route type stored, use it to get the correct factory
+                    if (d.generic.routeType != null) {
+                        try {
+                            // Load the route class and use it to get the appropriate factory
+                            @SuppressWarnings("unchecked")
+                            Class<? extends org.matsim.api.core.v01.population.Route> routeClass = 
+                                (Class<? extends org.matsim.api.core.v01.population.Route>) Class.forName(d.generic.routeType);
+                            var routeFactory = factory.getRouteFactories().getFactory(routeClass);
+                            route = routeFactory.createRoute(startLink, endLink);
+                        } catch (ClassNotFoundException e) {
+                            // If class not found, fall back to creating a generic route
+                            System.err.println("Warning: Route class " + d.generic.routeType + " not found, using GenericRoute");
+                            route = RouteUtils.createGenericRouteImpl(startLink, endLink);
+                        }
+                    } else {
+                        // No route type stored (backward compatibility), create generic route
+                        route = RouteUtils.createGenericRouteImpl(startLink, endLink);
                     }
                     
                     // Set common route properties
