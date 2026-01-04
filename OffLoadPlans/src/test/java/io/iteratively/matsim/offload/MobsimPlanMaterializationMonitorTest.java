@@ -81,8 +81,8 @@ public class MobsimPlanMaterializationMonitorTest {
         // Test default values
         assertTrue(config.isEnableMobsimMonitoring(), 
                 "MobSim monitoring should be enabled by default");
-        assertEquals(300.0, config.getMobsimMonitoringIntervalSeconds(), 0.01,
-                "Default monitoring interval should be 300 seconds");
+        assertEquals(3600.0, config.getMobsimMonitoringIntervalSeconds(), 0.01,
+                "Default monitoring interval should be 3600 seconds");
         
         // Test setters
         config.setEnableMobsimMonitoring(false);

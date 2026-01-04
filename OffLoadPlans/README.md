@@ -170,13 +170,12 @@ Active background monitoring:
 MobSim-specific monitoring during the simulation phase:
 - Monitors plan materialization during the mobility simulation (MobSim)
 - Important because plans can be materialized during WithinDayReplanning or other MobSim operations
-- Configurable monitoring interval via `mobsimMonitoringIntervalSeconds` (default: 300 seconds = 5 minutes)
-- Logs comprehensive statistics at configured intervals:
-  - Total plans vs. materialized plans
-  - Materialization rate (percentage)
+- Configurable monitoring interval via `mobsimMonitoringIntervalSeconds` (default: 3600 seconds = 1 hour)
+- Logs statistics as a single JSON object with essential metrics:
+  - Total persons and plans
+  - Materialized plans count
   - Selected vs. non-selected materialized plans
-  - Materialization duration statistics (max and average)
-  - Distribution of materialized plans per person
+  - Materialization rate (percentage)
 - Can be enabled/disabled via `enableMobsimMonitoring` configuration (default: true)
 - Minimal performance overhead due to infrequent monitoring intervals
 - Helps understand memory usage patterns during the most memory-intensive simulation phase
@@ -249,7 +248,7 @@ The latest version includes several critical optimizations focused on **write pe
     <param name="maxNonSelectedMaterializationTimeMs" value="1000" />
     <param name="watchdogCheckIntervalMs" value="2000" />
     <param name="enableMobsimMonitoring" value="true" />
-    <param name="mobsimMonitoringIntervalSeconds" value="300.0" />
+    <param name="mobsimMonitoringIntervalSeconds" value="3600.0" />
 </module>
 ```
 
@@ -307,15 +306,13 @@ The latest version includes several critical optimizations focused on **write pe
 - When enabled, logs statistics at regular intervals during the simulation
 - Can be disabled to reduce log output if only iteration-level monitoring is needed
 
-**mobsimMonitoringIntervalSeconds** (default: 300.0)
+**mobsimMonitoringIntervalSeconds** (default: 3600.0)
 - Interval in simulation seconds for monitoring plan materialization during MobSim
-- Default is 300 seconds (5 minutes of simulation time)
+- Default is 3600 seconds (1 hour of simulation time)
 - Lower values = more frequent monitoring, more detailed insights but more log output
 - Higher values = less frequent monitoring, less log output but less granular insights
-- Typical values: 60-600 seconds depending on simulation duration and detail needs
-- Set to a very high value (e.g., 86400) to effectively monitor only once per day of simulation time
+- Typical values: 600-7200 seconds depending on simulation duration and detail needs
 - Only applies when `enableMobsimMonitoring` is true
-- Useful for understanding memory usage patterns and tuning `maxNonSelectedMaterializationTimeMs` and `watchdogCheckIntervalMs`
 
 ### Storage Backend Options
 
@@ -369,8 +366,8 @@ offloadConfig.setLogMaterializationStats(true);
 // Enable MobSim monitoring (default: true)
 offloadConfig.setEnableMobsimMonitoring(true);
 
-// Set MobSim monitoring interval (default: 300 seconds = 5 minutes)
-offloadConfig.setMobsimMonitoringIntervalSeconds(300.0); // Monitor every 5 minutes of simulation time
+// Set MobSim monitoring interval (default: 3600 seconds = 1 hour)
+offloadConfig.setMobsimMonitoringIntervalSeconds(3600.0); // Monitor every hour of simulation time
 
 Controler controler = new Controler(scenario);
 controler.addOverridingModule(new OffloadModule());
@@ -402,17 +399,17 @@ offloadConfig.setWatchdogCheckIntervalMs(500);              // check very freque
 The `mobsimMonitoringIntervalSeconds` parameter controls monitoring frequency during MobSim:
 
 ```java
-// Detailed monitoring - every minute of simulation time
+// Detailed monitoring - every 10 minutes of simulation time
 offloadConfig.setEnableMobsimMonitoring(true);
-offloadConfig.setMobsimMonitoringIntervalSeconds(60.0);  // every 1 minute
+offloadConfig.setMobsimMonitoringIntervalSeconds(600.0);  // every 10 minutes
 
 // Standard monitoring (default) - good balance
 offloadConfig.setEnableMobsimMonitoring(true);
-offloadConfig.setMobsimMonitoringIntervalSeconds(300.0); // every 5 minutes
+offloadConfig.setMobsimMonitoringIntervalSeconds(3600.0); // every hour
 
 // Coarse monitoring - less frequent, minimal overhead
 offloadConfig.setEnableMobsimMonitoring(true);
-offloadConfig.setMobsimMonitoringIntervalSeconds(600.0); // every 10 minutes
+offloadConfig.setMobsimMonitoringIntervalSeconds(7200.0); // every 2 hours
 
 // Disable MobSim monitoring - only iteration-level stats
 offloadConfig.setEnableMobsimMonitoring(false);
@@ -440,18 +437,9 @@ INFO  PlanMaterializationMonitor - Plan materialization stats at watchdog cleanu
       avgDuration=543.7ms, distribution={1 materialized=10000}}
 INFO  PlanMaterializationMonitor - Materialization rate: 10000/50000 (20.00 %)
 
-INFO  MobsimPlanMaterializationMonitor - MobSim plan materialization stats at t=00:05:00s: 
-      MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10015, 
-      selectedMaterialized=10000, nonSelectedMaterialized=15, maxDuration=234ms, 
-      avgDuration=87.5ms, distribution={1 materialized=9985, 2 materialized=15}}
-INFO  MobsimPlanMaterializationMonitor - MobSim materialization rate at t=00:05:00s: 10015/50000 (20.03 %)
-INFO  MobsimPlanMaterializationMonitor - MobSim materialization durations at t=00:05:00s - max: 234ms, avg: 87.5ms
+INFO  MobsimPlanMaterializationMonitor - {"time":"01:00:00", "totalPersons":10000, "totalPlans":50000, "materializedPlans":10015, "selectedMaterialized":10000, "nonSelectedMaterialized":15, "materializationRate":20.03}
 
-INFO  MobsimPlanMaterializationMonitor - MobSim plan materialization stats at t=00:10:00s: 
-      MaterializationStats{totalPersons=10000, totalPlans=50000, materializedPlans=10008, 
-      selectedMaterialized=10000, nonSelectedMaterialized=8, maxDuration=156ms, 
-      avgDuration=45.2ms, distribution={1 materialized=9992, 2 materialized=8}}
-INFO  MobsimPlanMaterializationMonitor - MobSim materialization rate at t=00:10:00s: 10008/50000 (20.02 %)
+INFO  MobsimPlanMaterializationMonitor - {"time":"02:00:00", "totalPersons":10000, "totalPlans":50000, "materializedPlans":10008, "selectedMaterialized":10000, "nonSelectedMaterialized":8, "materializationRate":20.02}
 ```
 
 ## Memory Benefits

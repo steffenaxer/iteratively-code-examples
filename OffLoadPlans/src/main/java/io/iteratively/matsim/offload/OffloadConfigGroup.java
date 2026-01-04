@@ -34,7 +34,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private long maxNonSelectedMaterializationTimeMs = 1000; // 1 second default - keep very short to avoid excessive memory usage
     private long watchdogCheckIntervalMs = 2000; // 2 seconds default
     private boolean enableMobsimMonitoring = true;
-    private double mobsimMonitoringIntervalSeconds = 300.0; // 5 minutes default
+    private double mobsimMonitoringIntervalSeconds = 3600.0; // 1 hour default
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -205,7 +205,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         comments.put(MAX_NON_SELECTED_MATERIALIZATION_TIME_MS, "Maximum time in milliseconds a non-selected plan can remain materialized (default: 1000ms = 1 second). Keep short to avoid excessive memory usage.");
         comments.put(WATCHDOG_CHECK_INTERVAL_MS, "Interval in milliseconds for the watchdog to check for old materialized plans (default: 2000ms = 2 seconds)");
         comments.put(ENABLE_MOBSIM_MONITORING, "Enable monitoring of plan materialization during MobSim (default: true)");
-        comments.put(MOBSIM_MONITORING_INTERVAL_SECONDS, "Interval in simulation seconds for monitoring plan materialization during MobSim (default: 300.0 = 5 minutes)");
+        comments.put(MOBSIM_MONITORING_INTERVAL_SECONDS, "Interval in simulation seconds for monitoring plan materialization during MobSim (default: 3600.0 = 1 hour)");
         return comments;
     }
 }

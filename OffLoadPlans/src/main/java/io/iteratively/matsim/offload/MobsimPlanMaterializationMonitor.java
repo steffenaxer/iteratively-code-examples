@@ -17,17 +17,9 @@ import org.matsim.core.mobsim.framework.listeners.MobsimBeforeSimStepListener;
  * monitoring helps understand memory usage patterns and the effectiveness of the offloading strategy.</p>
  * 
  * <p>The monitoring interval is configurable via {@code mobsimMonitoringIntervalSeconds} in the
- * OffloadConfigGroup. A reasonable default is 300 seconds (5 minutes) to balance between
- * monitoring granularity and performance overhead.</p>
+ * OffloadConfigGroup. Default is 3600 seconds (1 hour).</p>
  * 
- * <p>Statistics logged include:</p>
- * <ul>
- *   <li>Total number of plans vs. materialized plans</li>
- *   <li>Materialization rate (percentage)</li>
- *   <li>Selected vs. non-selected materialized plans</li>
- *   <li>Materialization duration statistics (max and average)</li>
- *   <li>Distribution of materialized plans across the population</li>
- * </ul>
+ * <p>Statistics are logged as a single JSON object with essential metrics.</p>
  */
 public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimStepListener {
     private static final Logger log = LogManager.getLogger(MobsimPlanMaterializationMonitor.class);
@@ -69,40 +61,25 @@ public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimSt
     private void monitorMaterialization(double simTime) {
         Population population = scenario.getPopulation();
         
-        // Collect and log statistics
+        // Collect statistics
         PlanMaterializationMonitor.MaterializationStats stats = 
                 PlanMaterializationMonitor.collectStats(population);
         
-        log.info("MobSim plan materialization stats at t={}s: {}", 
-                formatTime(simTime), stats);
+        // Calculate materialization rate
+        double materializationRate = stats.totalPlans() > 0 
+                ? (stats.materializedPlans() * 100.0) / stats.totalPlans() 
+                : 0.0;
         
-        // Log memory efficiency
-        if (stats.totalPlans() > 0) {
-            double materializationRate = (stats.materializedPlans() * 100.0) / stats.totalPlans();
-            log.info("MobSim materialization rate at t={}s: {}/{} ({} %)", 
-                    formatTime(simTime),
-                    stats.materializedPlans(), 
-                    stats.totalPlans(), 
-                    String.format("%.2f", materializationRate));
-        }
-        
-        // Log duration info
-        if (stats.maxMaterializationDurationMs() > 0) {
-            log.info("MobSim materialization durations at t={}s - max: {}ms, avg: {}ms", 
-                    formatTime(simTime),
-                    stats.maxMaterializationDurationMs(), 
-                    String.format("%.1f", stats.avgMaterializationDurationMs()));
-        }
-        
-        // Warn if too many non-selected plans are materialized
-        if (stats.nonSelectedMaterializedPlans() > 0 && stats.materializedPlans() > 0) {
-            double nonSelectedRate = (stats.nonSelectedMaterializedPlans() * 100.0) / stats.materializedPlans();
-            log.warn("MobSim at t={}s: Found {} non-selected materialized plans ({} % of materialized) - " +
-                    "consider enabling auto-dematerialization or reducing maxNonSelectedMaterializationTimeMs", 
-                    formatTime(simTime),
-                    stats.nonSelectedMaterializedPlans(),
-                    String.format("%.1f", nonSelectedRate));
-        }
+        // Log as JSON object with essential metrics
+        log.info("{{\"time\":\"{}\", \"totalPersons\":{}, \"totalPlans\":{}, \"materializedPlans\":{}, " +
+                "\"selectedMaterialized\":{}, \"nonSelectedMaterialized\":{}, \"materializationRate\":{}}}", 
+                formatTime(simTime),
+                stats.totalPersons(),
+                stats.totalPlans(),
+                stats.materializedPlans(),
+                stats.selectedMaterializedPlans(),
+                stats.nonSelectedMaterializedPlans(),
+                String.format("%.2f", materializationRate));
     }
     
     /**
