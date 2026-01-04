@@ -166,7 +166,10 @@ public final class OffloadSupport {
     /**
      * Extracts the planId from a Plan object.
      * Handles both PlanProxy and regular Plan instances.
-     * @return planId if available, null otherwise
+     * 
+     * @param plan the Plan to extract planId from
+     * @return planId if available, null if the plan doesn't have a planId assigned
+     *         (typically happens for regular Plans that haven't been persisted yet)
      */
     public static String getPlanId(Plan plan) {
         if (plan instanceof PlanProxy proxy) {
@@ -182,7 +185,12 @@ public final class OffloadSupport {
 
     /**
      * Collects all planIds from a Person's plan list.
-     * Only includes plans that have a planId assigned.
+     * Only includes plans that have a planId assigned (i.e., plans that have been
+     * persisted to the store or are PlanProxy instances).
+     * 
+     * @param person the Person whose plan IDs should be collected
+     * @return Set of planIds for all plans in the Person that have IDs.
+     *         Plans without planIds are filtered out (not included in the result).
      */
     public static Set<String> collectActivePlanIds(Person person) {
         Set<String> activePlanIds = new HashSet<>();
