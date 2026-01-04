@@ -87,8 +87,7 @@ public class PlanProxyTest {
             store.putPlan("1", "p0", plan, 15.0, 0, true);
             store.commit();
 
-            PlanHeader header = store.listPlanHeaders("1").get(0);
-            PlanProxy proxy = new PlanProxy(header, person, store);
+            PlanProxy proxy = store.listPlanProxies(person).get(0);
 
             // Verify not materialized
             assertFalse(proxy.isMaterialized(), "Should not be materialized initially");

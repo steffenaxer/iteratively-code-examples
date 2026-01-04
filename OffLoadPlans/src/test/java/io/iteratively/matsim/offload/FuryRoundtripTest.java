@@ -33,9 +33,9 @@ public class FuryRoundtripTest {
         MapDbPlanStore store = new MapDbPlanStore(db, sc, sc.getConfig().replanning().getMaxAgentPlanMemorySize());
         store.putPlan("1", "p0", plan, plan.getScore(), 0, true);
 
-        var headers = store.listPlanHeaders("1");
-        assertEquals(1, headers.size());
-        assertEquals(12.34, headers.get(0).score, 1e-9);
+        var proxies = store.listPlanProxies(person);
+        assertEquals(1, proxies.size());
+        assertEquals(12.34, proxies.get(0).getScore(), 1e-9);
 
         Plan copy = store.materialize("1", "p0");
         assertNotNull(copy);

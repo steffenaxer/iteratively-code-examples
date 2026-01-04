@@ -18,6 +18,7 @@ public final class PlanProxy implements Plan {
     private final Person person;
     private final PlanStore store;
     private final int creationIter;
+    private final boolean selected;
 
     // Cached values - work without materialization
     private Double score;
@@ -25,25 +26,20 @@ public final class PlanProxy implements Plan {
 
     private Plan materializedPlan;
 
-    public PlanProxy(PlanHeader header, Person person, PlanStore store) {
-        this.planId = header.planId;
-        this.person = person;
-        this.store = store;
-        this.type = header.type;
-        this.creationIter = header.creationIter;
-        // NaN als null behandeln
-        this.score = isValidScore(header.score) ? header.score : null;
-    }
-
     public PlanProxy(String planId, Person person, PlanStore store, String type,
-                     int creationIter, Double score) {
+                     int creationIter, Double score, boolean selected) {
         this.planId = planId;
         this.person = person;
         this.store = store;
         this.type = type;
         this.creationIter = creationIter;
+        this.selected = selected;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
+    }
+    
+    public boolean isSelected() {
+        return selected;
     }
 
     private static boolean isValidScore(Double score) {

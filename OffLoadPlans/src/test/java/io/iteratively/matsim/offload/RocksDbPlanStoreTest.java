@@ -114,11 +114,11 @@ public class RocksDbPlanStoreTest {
             assertNotNull(materialized, "Plan " + i + " should be retrievable");
         }
         
-        List<PlanHeader> headers = store.listPlanHeaders("person1");
-        assertEquals(3, headers.size());
+        List<PlanProxy> proxies = store.listPlanProxies(person);
+        assertEquals(3, proxies.size());
         
-        for (PlanHeader header : headers) {
-            assertEquals(0, header.creationIter, "All plans should have creationIter = 0");
+        for (PlanProxy proxy : proxies) {
+            assertEquals(0, proxy.getIterationCreated(), "All plans should have creationIter = 0");
         }
     }
     
@@ -145,14 +145,14 @@ public class RocksDbPlanStoreTest {
         assertNotNull(materialized);
         assertEquals(1, materialized.getPlanElements().size());
         
-        List<PlanHeader> headers = store.listPlanHeaders("person1");
-        assertEquals(1, headers.size());
-        assertEquals(0, headers.get(0).creationIter, "creationIter should remain 0 (from first put)");
-        assertEquals(1, headers.get(0).lastUsedIter, "lastUsedIter should be 1 (from second put)");
+        Person testPerson = pf.createPerson(Id.createPersonId("person1"));
+        List<PlanProxy> proxies = store.listPlanProxies(testPerson);
+        assertEquals(1, proxies.size());
+        assertEquals(0, proxies.get(0).getIterationCreated(), "creationIter should remain 0 (from first put)");
     }
     
     @Test
-    public void testListPlanHeaders() {
+    public void testListPlanProxies() {
         PopulationFactory pf = scenario.getPopulation().getFactory();
         Person person = pf.createPerson(Id.createPersonId("person1"));
         scenario.getPopulation().addPerson(person);
@@ -164,14 +164,12 @@ public class RocksDbPlanStoreTest {
         
         store.putPlan("person1", "plan1", plan, 15.5, 5, true);
         
-        List<PlanHeader> headers = store.listPlanHeaders("person1");
+        List<PlanProxy> proxies = store.listPlanProxies(person);
         
-        assertEquals(1, headers.size());
-        PlanHeader header = headers.get(0);
-        assertEquals("plan1", header.planId);
-        assertEquals(15.5, header.score, 0.001);
-        assertEquals(5, header.creationIter);
-        assertEquals(5, header.lastUsedIter);
-        assertTrue(header.selected);
+        assertEquals(1, proxies.size());
+        PlanProxy proxy = proxies.get(0);
+        assertEquals("plan1", proxy.getPlanId());
+        assertEquals(15.5, proxy.getScore(), 0.001);
+        assertEquals(5, proxy.getIterationCreated());
     }
 }

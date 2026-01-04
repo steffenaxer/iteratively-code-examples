@@ -20,19 +20,19 @@ public final class OffloadSupport {
 
     public static void loadAllPlansAsProxies(Person p, PlanStore store) {
         String personId = p.getId().toString();
-        List<PlanHeader> headers = store.listPlanHeaders(personId);
+        List<PlanProxy> proxies = store.listPlanProxies(p);
 
-        if (headers.isEmpty()) {
+        if (proxies.isEmpty()) {
             return;
         }
 
         p.getPlans().clear();
 
         Plan selectedPlan = null;
-        for (PlanHeader h : headers) {
-            PlanProxy proxy = new PlanProxy(h, p, store);
+        
+        for (PlanProxy proxy : proxies) {
             p.addPlan(proxy);
-            if (h.selected) {
+            if (proxy.isSelected()) {
                 selectedPlan = proxy;
             }
         }
@@ -95,9 +95,9 @@ public final class OffloadSupport {
         }
 
         Plan newPlan = store.materialize(personId, newPlanId);
-        Double score = store.listPlanHeaders(personId).stream()
-                .filter(h -> h.planId.equals(newPlanId))
-                .map(h -> h.score)
+        Double score = store.listPlanProxies(p).stream()
+                .filter(proxy -> proxy.getPlanId().equals(newPlanId))
+                .map(PlanProxy::getScore)
                 .findFirst().orElse(null);
         newPlan.setScore(score);
         p.getPlans().clear();
