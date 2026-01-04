@@ -9,6 +9,8 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     public static final String GROUP_NAME = "offload";
     private static final String STORE_DIRECTORY = "storeDirectory";
     private static final String STORAGE_BACKEND = "storageBackend";
+    private static final String ENABLE_MOBSIM_MONITORING = "enableMobsimMonitoring";
+    private static final String MOBSIM_MONITORING_INTERVAL_SECONDS = "mobsimMonitoringIntervalSeconds";
 
     public static final String DB_FILE_NAME = "plans.mapdb";
 
@@ -19,6 +21,8 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
 
     private String storeDirectory = null;
     private StorageBackend storageBackend = StorageBackend.MAPDB;
+    private boolean enableMobsimMonitoring = true;
+    private double mobsimMonitoringIntervalSeconds = 3600.0;
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -52,11 +56,33 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         this.storageBackend = storageBackend;
     }
 
+    @StringGetter(ENABLE_MOBSIM_MONITORING)
+    public boolean getEnableMobsimMonitoring() {
+        return enableMobsimMonitoring;
+    }
+
+    @StringSetter(ENABLE_MOBSIM_MONITORING)
+    public void setEnableMobsimMonitoring(boolean enableMobsimMonitoring) {
+        this.enableMobsimMonitoring = enableMobsimMonitoring;
+    }
+
+    @StringGetter(MOBSIM_MONITORING_INTERVAL_SECONDS)
+    public double getMobsimMonitoringIntervalSeconds() {
+        return mobsimMonitoringIntervalSeconds;
+    }
+
+    @StringSetter(MOBSIM_MONITORING_INTERVAL_SECONDS)
+    public void setMobsimMonitoringIntervalSeconds(double mobsimMonitoringIntervalSeconds) {
+        this.mobsimMonitoringIntervalSeconds = mobsimMonitoringIntervalSeconds;
+    }
+
     @Override
     public Map<String, String> getComments() {
         Map<String, String> comments = super.getComments();
         comments.put(STORE_DIRECTORY, "Directory for the plan store. If null, uses system temp directory");
         comments.put(STORAGE_BACKEND, "Storage backend: MAPDB or ROCKSDB (default: MAPDB)");
+        comments.put(ENABLE_MOBSIM_MONITORING, "Enable monitoring of plan materialization during MobSim (default: true)");
+        comments.put(MOBSIM_MONITORING_INTERVAL_SECONDS, "Interval for MobSim monitoring in seconds (default: 3600.0)");
         return comments;
     }
 }
