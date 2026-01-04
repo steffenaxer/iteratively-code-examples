@@ -23,7 +23,6 @@ public final class MapDbPlanStore implements PlanStore {
     private final HTreeMap<String, String> planIndexByPerson;
 
     private final FuryPlanCodec codec;
-    private final int maxPlansPerAgent;
     private final Scenario scenario;
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
@@ -80,8 +79,7 @@ public final class MapDbPlanStore implements PlanStore {
         }
     }
 
-    public MapDbPlanStore(File file, Scenario scenario, int maxPlansPerAgent) {
-        this.maxPlansPerAgent = maxPlansPerAgent;
+    public MapDbPlanStore(File file, Scenario scenario) {
         this.scenario = scenario;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();

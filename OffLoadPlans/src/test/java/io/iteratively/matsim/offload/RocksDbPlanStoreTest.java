@@ -30,7 +30,7 @@ public class RocksDbPlanStoreTest {
         scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         File dbDir = new File(utils.getOutputDirectory(), "rocksdb");
         dbDir.mkdirs();
-        store = new RocksDbPlanStore(dbDir, scenario, 5);
+        store = new RocksDbPlanStore(dbDir, scenario);
     }
     
     @AfterEach

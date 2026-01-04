@@ -22,7 +22,6 @@ public final class RocksDbPlanStore implements PlanStore {
     private final ReadOptions readOptions;
 
     private final FuryPlanCodec codec;
-    private final int maxPlansPerAgent;
     private final Scenario scenario;
 
     private final ConcurrentHashMap<String, List<String>> planIdCache;
@@ -85,8 +84,7 @@ public final class RocksDbPlanStore implements PlanStore {
         }
     }
 
-    public RocksDbPlanStore(File directory, Scenario scenario, int maxPlansPerAgent) {
-        this.maxPlansPerAgent = maxPlansPerAgent;
+    public RocksDbPlanStore(File directory, Scenario scenario) {
         this.scenario = scenario;
         this.planIdCache = new ConcurrentHashMap<>();
         this.activePlanCache = new ConcurrentHashMap<>();
