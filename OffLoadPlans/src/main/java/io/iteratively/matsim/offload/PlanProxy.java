@@ -22,6 +22,9 @@ public final class PlanProxy implements Plan {
     // Cached values - work without materialization
     private Double score;
     private String type;
+    
+    // Track the current iteration for score updates
+    private int currentIteration;
 
     private Plan materializedPlan;
 
@@ -33,6 +36,8 @@ public final class PlanProxy implements Plan {
         this.creationIter = header.creationIter;
         // NaN als null behandeln
         this.score = isValidScore(header.score) ? header.score : null;
+        // Initialize to 0; caller must call setCurrentIteration() before using this proxy
+        this.currentIteration = 0;
     }
 
     public PlanProxy(String planId, Person person, PlanStore store, String type,
@@ -44,6 +49,9 @@ public final class PlanProxy implements Plan {
         this.creationIter = creationIter;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
+        // For newly created plans, currentIteration is set to creationIter since
+        // the plan is being created in the current iteration
+        this.currentIteration = creationIter;
     }
 
     private static boolean isValidScore(Double score) {
@@ -52,6 +60,23 @@ public final class PlanProxy implements Plan {
 
     public String getPlanId() {
         return planId;
+    }
+    
+    /**
+     * Sets the current iteration for this proxy.
+     * <p>
+     * This method MUST be called:
+     * <ul>
+     *   <li>After constructing a proxy from a PlanHeader (before any score updates)</li>
+     *   <li>At the start of each iteration when proxies are loaded from the store</li>
+     * </ul>
+     * Failing to call this method will result in incorrect lastUsedIter values
+     * in the plan store when scores are updated.
+     * 
+     * @param iteration the current iteration number
+     */
+    public void setCurrentIteration(int iteration) {
+        this.currentIteration = iteration;
     }
 
     @Override
@@ -94,7 +119,7 @@ public final class PlanProxy implements Plan {
 
         // Nur gültige Scores zum Store schreiben
         if (this.score != null) {
-            store.updateScore(person.getId().toString(), planId, this.score, creationIter);
+            store.updateScore(person.getId().toString(), planId, this.score, currentIteration);
         }
     }
 

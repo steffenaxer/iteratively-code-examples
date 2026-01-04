@@ -40,7 +40,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load all plans as proxies
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
 
             // Verify all plans are loaded as proxies
             List<? extends Plan> plans = person.getPlans();
@@ -130,7 +130,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load as proxy
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
             PlanProxy proxy = (PlanProxy) person.getPlans().get(0);
 
             assertFalse(proxy.isMaterialized(), "Should start not materialized");
@@ -178,7 +178,7 @@ public class PlanProxyTest {
             store.commit();
 
             // Load all as proxies
-            OffloadSupport.loadAllPlansAsProxies(person, store);
+            OffloadSupport.loadAllPlansAsProxies(person, store, 0);
 
             // Verify initial state
             assertEquals(2, person.getPlans().size());
@@ -190,6 +190,44 @@ public class PlanProxyTest {
             // Verify swap worked
             assertEquals(2, person.getPlans().size(), "Should still have 2 plans");
             assertEquals("p1", ((PlanProxy) person.getSelectedPlan()).getPlanId());
+        }
+    }
+
+    @Test
+    public void testScoreUpdateTracksCurrentIteration() {
+        Scenario sc = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        PopulationFactory pf = sc.getPopulation().getFactory();
+        Person person = pf.createPerson(Id.createPersonId("1"));
+        sc.getPopulation().addPerson(person);
+
+        File db = new File(tempDir, "plans.mapdb");
+        try (MapDbPlanStore store = new MapDbPlanStore(db, sc, 5)) {
+            // Create a plan in iteration 0
+            Plan plan = pf.createPlan();
+            plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
+            plan.addLeg(pf.createLeg("car"));
+            plan.addActivity(pf.createActivityFromCoord("work", new Coord(1000, 500)));
+            plan.setScore(10.0);
+            store.putPlan("1", "p0", plan, plan.getScore(), 0, true);
+            store.commit();
+
+            // Load the plan as a proxy for iteration 5
+            OffloadSupport.loadAllPlansAsProxies(person, store, 5);
+            PlanProxy proxy = (PlanProxy) person.getPlans().get(0);
+
+            // Update the score (simulating MATSim's scoring phase)
+            proxy.setScore(25.0);
+            store.commit();
+
+            // Reload plan headers and verify lastUsedIter is updated to iteration 5
+            List<PlanHeader> headers = store.listPlanHeaders("1");
+            assertEquals(1, headers.size(), "Should have 1 plan");
+            PlanHeader header = headers.get(0);
+            
+            assertEquals("p0", header.planId, "Plan ID should match");
+            assertEquals(25.0, header.score, 0.001, "Score should be updated");
+            assertEquals(0, header.creationIter, "Creation iteration should remain 0");
+            assertEquals(5, header.lastUsedIter, "Last used iteration should be 5 (current iteration)");
         }
     }
 }

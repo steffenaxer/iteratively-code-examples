@@ -38,7 +38,7 @@ public final class OffloadIterationHooks implements IterationStartsListener, Ite
 
         // Load all plans as proxies for all persons
         for (Person p : pop.getPersons().values()) {
-            OffloadSupport.loadAllPlansAsProxies(p, store);
+            OffloadSupport.loadAllPlansAsProxies(p, store, iter);
         }
 
         // Ensure selected plan is materialized for simulation

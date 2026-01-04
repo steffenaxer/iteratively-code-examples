@@ -18,7 +18,7 @@ public final class OffloadSupport {
         return isValidScore(score) ? score : Double.NEGATIVE_INFINITY;
     }
 
-    public static void loadAllPlansAsProxies(Person p, PlanStore store) {
+    public static void loadAllPlansAsProxies(Person p, PlanStore store, int currentIteration) {
         String personId = p.getId().toString();
         List<PlanHeader> headers = store.listPlanHeaders(personId);
 
@@ -31,6 +31,7 @@ public final class OffloadSupport {
         Plan selectedPlan = null;
         for (PlanHeader h : headers) {
             PlanProxy proxy = new PlanProxy(h, p, store);
+            proxy.setCurrentIteration(currentIteration);
             p.addPlan(proxy);
             if (h.selected) {
                 selectedPlan = proxy;

@@ -19,18 +19,36 @@ This module implements memory-efficient plan offloading for MATSim simulations u
 - **Lazy materialization**: Full plan data is loaded only when accessing plan elements
 - **Automatic dematerialization**: After persistence, materialized plans are dropped to save memory
 - **Score-based selection**: Plan selectors can work with all plans' scores without materialization
+- **Current iteration tracking**: Each proxy tracks the current iteration to ensure score updates are persisted with the correct `lastUsedIter` value
+
+### Score Persistence and Iteration Tracking
+
+When MATSim's scoring phase updates plan scores by calling `plan.setScore()`, the `PlanProxy` ensures that:
+
+1. The score is immediately persisted to the plan store via `store.updateScore()`
+2. The `lastUsedIter` field in the store is updated with the **current iteration** number (not the creation iteration)
+3. This allows the offload system to track which iteration a plan was last used/scored
+
+The current iteration is set on each proxy at the start of every iteration via `proxy.setCurrentIteration(currentIter)`, ensuring accurate tracking throughout the simulation lifecycle.
 
 ## Workflow
 
 ### Iteration Start
 
 ```java
-// 1. Load all plans as proxies (scores in memory)
-OffloadSupport.loadAllPlansAsProxies(person, store);
+// 1. Load all plans as proxies (scores in memory) and set current iteration
+OffloadSupport.loadAllPlansAsProxies(person, store, currentIteration);
 
 // 2. Materialize selected plan for simulation
 OffloadSupport.ensureSelectedMaterialized(person, store, cache);
 ```
+
+### During Scoring
+
+When MATSim's scoring phase runs:
+- `plan.setScore(newScore)` is called on the selected (materialized) plan
+- The proxy intercepts this and updates the store with the current iteration number
+- This ensures `lastUsedIter` reflects when the plan was actually scored
 
 ### During Replanning
 
@@ -53,8 +71,9 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ### OffloadSupport
 
-- **`loadAllPlansAsProxies(Person, PlanStore)`**
+- **`loadAllPlansAsProxies(Person, PlanStore, int currentIteration)`**
   - Loads all stored plans as lightweight proxies
+  - Sets the current iteration on each proxy for accurate score tracking
   - Keeps scores in memory for plan selection
   
 - **`persistAllMaterialized(Person, PlanStore, int)`**
@@ -71,9 +90,13 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ### PlanProxy
 
+- **`setCurrentIteration(int iteration)`**
+  - Sets the current iteration for this proxy
+  - Called at iteration start to ensure score updates track the correct iteration
+  
 - **`getScore()` / `setScore(Double)`**
   - Score access without materialization
-  - Score updates are persisted to store
+  - Score updates are persisted to store with current iteration number
   
 - **`getPlanElements()`**
   - Triggers lazy materialization
