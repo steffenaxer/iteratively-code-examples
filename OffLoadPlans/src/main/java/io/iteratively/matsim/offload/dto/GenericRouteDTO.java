@@ -7,4 +7,5 @@ public final class GenericRouteDTO {
     public Double travelTime;
     public Double distance;
     public String description;
+    // Note: GenericRoute does not support vehicleId in MATSim
 }

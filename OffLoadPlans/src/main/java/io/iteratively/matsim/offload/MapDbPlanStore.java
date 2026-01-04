@@ -32,10 +32,10 @@ public final class MapDbPlanStore implements PlanStore {
     private final List<PendingWrite> pendingWrites = new ArrayList<>();
     private static final int WRITE_BUFFER_SIZE = 100_000;
 
-    private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type) implements Serializable {
-        static byte[] serializeDirect(byte[] blob, double score, int creationIter, int lastUsedIter, String type) {
+    private record PlanData(byte[] blob, double score, int creationIter, int lastUsedIter, String type, String planMutator) implements Serializable {
+        static byte[] serializeDirect(byte[] blob, double score, int creationIter, int lastUsedIter, String type, String planMutator) {
             try {
-                int estimatedSize = 4 + blob.length + 8 + 4 + 4 + 1 + (type != null ? 4 + type.length() * 3 : 0);
+                int estimatedSize = 4 + blob.length + 8 + 4 + 4 + 1 + (type != null ? 4 + type.length() * 3 : 0) + 1 + (planMutator != null ? 4 + planMutator.length() * 3 : 0);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream(estimatedSize);
                 DataOutputStream dos = new DataOutputStream(baos);
                 dos.writeInt(blob.length);
@@ -45,6 +45,8 @@ public final class MapDbPlanStore implements PlanStore {
                 dos.writeInt(lastUsedIter);
                 dos.writeBoolean(type != null);
                 if (type != null) dos.writeUTF(type);
+                dos.writeBoolean(planMutator != null);
+                if (planMutator != null) dos.writeUTF(planMutator);
                 dos.flush();
                 return baos.toByteArray();
             } catch (IOException e) {
@@ -53,7 +55,7 @@ public final class MapDbPlanStore implements PlanStore {
         }
         
         byte[] serialize() {
-            return serializeDirect(blob, score, creationIter, lastUsedIter, type);
+            return serializeDirect(blob, score, creationIter, lastUsedIter, type, planMutator);
         }
 
         static PlanData deserialize(byte[] data) {
@@ -66,16 +68,21 @@ public final class MapDbPlanStore implements PlanStore {
                 int creationIter = dis.readInt();
                 int lastUsedIter = dis.readInt();
                 String type = dis.readBoolean() ? dis.readUTF() : null;
-                return new PlanData(blob, score, creationIter, lastUsedIter, type);
+                String planMutator = null;
+                // Check if there's more data (for backward compatibility)
+                if (dis.available() > 0) {
+                    planMutator = dis.readBoolean() ? dis.readUTF() : null;
+                }
+                return new PlanData(blob, score, creationIter, lastUsedIter, type, planMutator);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }
     }
 
-    private record PendingWrite(String key, String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
-        static PendingWrite create(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type) {
-            return new PendingWrite(MapDbPlanStore.key(personId, planId), personId, planId, blob, score, iter, makeSelected, type);
+    private record PendingWrite(String key, String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type, String planMutator) {
+        static PendingWrite create(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String type, String planMutator) {
+            return new PendingWrite(MapDbPlanStore.key(personId, planId), personId, planId, blob, score, iter, makeSelected, type, planMutator);
         }
     }
 
@@ -153,7 +160,7 @@ public final class MapDbPlanStore implements PlanStore {
             PlanData data = getPlanData(personId, pid);
             if (data != null) {
                 boolean sel = pid.equals(activeId);
-                out.add(new PlanHeader(pid, data.score, data.type, data.creationIter, data.lastUsedIter, sel));
+                out.add(new PlanHeader(pid, data.score, data.type, data.planMutator, data.creationIter, data.lastUsedIter, sel));
             }
         }
         return out;
@@ -165,7 +172,7 @@ public final class MapDbPlanStore implements PlanStore {
             for (int i = pendingWrites.size() - 1; i >= 0; i--) {
                 PendingWrite pw = pendingWrites.get(i);
                 if (pw.personId.equals(personId) && pw.planId.equals(planId)) {
-                    return new PlanData(pw.blob, pw.score, pw.iter, pw.iter, pw.type);
+                    return new PlanData(pw.blob, pw.score, pw.iter, pw.iter, pw.type, pw.planMutator);
                 }
             }
         }
@@ -177,21 +184,22 @@ public final class MapDbPlanStore implements PlanStore {
     public void putPlan(String personId, String planId, Plan plan, double score, int iter, boolean makeSelected) {
         byte[] blob = codec.serialize(plan);
         String planType = plan.getType();
-        putPlanRaw(personId, planId, blob, score, iter, makeSelected, planType);
+        String planMutator = plan.getPlanMutator();
+        putPlanRaw(personId, planId, blob, score, iter, makeSelected, planType, planMutator);
     }
 
     @Override
     public void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected) {
-        putPlanRaw(personId, planId, blob, score, iter, makeSelected, null);
+        putPlanRaw(personId, planId, blob, score, iter, makeSelected, null, null);
     }
     
-    private void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String planType) {
+    private void putPlanRaw(String personId, String planId, byte[] blob, double score, int iter, boolean makeSelected, String planType, String planMutator) {
         String k = key(personId, planId);
         creationIterCache.putIfAbsent(k, iter);
         
         boolean shouldFlush;
         synchronized (pendingWrites) {
-            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType));
+            pendingWrites.add(PendingWrite.create(personId, planId, blob, score, iter, makeSelected, planType, planMutator));
             updatePlanIndexCache(personId, planId);
             if (makeSelected) {
                 activePlanCache.put(personId, planId);
@@ -239,7 +247,7 @@ public final class MapDbPlanStore implements PlanStore {
         for (Map.Entry<String, PendingWrite> entry : latestByKey.entrySet()) {
             PendingWrite pw = entry.getValue();
             int creationIter = creationIterCache.getOrDefault(pw.key, pw.iter);
-            byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type);
+            byte[] serialized = PlanData.serializeDirect(pw.blob, pw.score, creationIter, pw.iter, pw.type, pw.planMutator);
             dataBatch.put(pw.key, serialized);
         }
 
@@ -315,7 +323,7 @@ public final class MapDbPlanStore implements PlanStore {
         String k = key(personId, planId);
         PlanData existing = getPlanData(personId, planId);
         if (existing != null) {
-            PlanData updated = new PlanData(existing.blob, score, existing.creationIter, iter, existing.type);
+            PlanData updated = new PlanData(existing.blob, score, existing.creationIter, iter, existing.type, existing.planMutator);
             planDataMap.put(k, updated.serialize());
             creationIterCache.put(k, existing.creationIter);
         }

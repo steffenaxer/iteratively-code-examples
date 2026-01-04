@@ -10,6 +10,7 @@ import org.matsim.core.config.ConfigUtils;
 import org.matsim.core.scenario.ScenarioUtils;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class OffloadSupport {
@@ -56,7 +57,9 @@ public final class OffloadSupport {
     public static void persistAllMaterialized(Person p, PlanStore store, int iter) {
         String personId = p.getId().toString();
 
-        for (Plan plan : p.getPlans()) {
+        List<? extends Plan> plans = p.getPlans();
+        for (int i = 0; i < plans.size(); i++) {
+            Plan plan = plans.get(i);
             if (plan instanceof PlanProxy proxy) {
                 if (proxy.isMaterialized()) {
                     Plan materialized = proxy.getMaterializedPlan();
@@ -70,6 +73,7 @@ public final class OffloadSupport {
                     proxy.dematerialize();
                 }
             } else {
+                // Regular plan - persist it and convert to proxy
                 if (shouldPersist(plan)) {
                     String planId = ensurePlanId(plan);
                     double score = toStorableScore(plan.getScore());
@@ -79,6 +83,89 @@ public final class OffloadSupport {
                 }
             }
         }
+        
+        // After persisting, convert any remaining regular plans to proxies
+        convertRegularPlansToProxies(p, store, iter);
+    }
+    
+    /**
+     * Converts any regular Plan objects in the person's plans list to PlanProxy objects.
+     * This should be called after plans have been persisted to the store.
+     * 
+     * IMPORTANT: This method preserves the order of plans in the list, which is critical
+     * for deterministic behavior in plan selectors that depend on iteration order.
+     * 
+     * @param p the person whose plans to convert
+     * @param store the plan store
+     * @param iter the current iteration
+     * @return the number of plans converted
+     */
+    public static int convertRegularPlansToProxies(Person p, PlanStore store, int iter) {
+        String personId = p.getId().toString();
+        
+        // Collect regular plans with their indices to preserve order
+        List<Integer> indicesToConvert = new ArrayList<>();
+        List<Plan> plansToConvert = new ArrayList<>();
+        
+        List<? extends Plan> allPlans = p.getPlans();
+        for (int i = 0; i < allPlans.size(); i++) {
+            Plan plan = allPlans.get(i);
+            if (!(plan instanceof PlanProxy)) {
+                indicesToConvert.add(i);
+                plansToConvert.add(plan);
+            }
+        }
+        
+        if (plansToConvert.isEmpty()) {
+            return 0;
+        }
+        
+        // Remember the selected plan
+        Plan selectedPlan = p.getSelectedPlan();
+        PlanProxy newSelectedProxy = null;
+        
+        // Remove all regular plans from the list
+        for (Plan plan : plansToConvert) {
+            p.removePlan(plan);
+        }
+        
+        // Create proxies and insert them at their original positions
+        for (int i = 0; i < plansToConvert.size(); i++) {
+            Plan plan = plansToConvert.get(i);
+            int originalIndex = indicesToConvert.get(i);
+            String planId = ensurePlanId(plan);
+            
+            // Create proxy replacement
+            PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), 
+                plan.getPlanMutator(), iter, plan.getScore());
+            
+            // Insert proxy at the correct position
+            // Account for previously removed plans: we need to insert at position
+            // (originalIndex - number of plans we've already removed before this index)
+            int adjustedIndex = originalIndex - i;
+            
+            // Get current plans list and insert at the adjusted position
+            List<Plan> currentPlans = new ArrayList<>(p.getPlans());
+            currentPlans.add(adjustedIndex, proxy);
+            
+            // Clear and rebuild the plans list
+            p.getPlans().clear();
+            for (Plan planToAdd : currentPlans) {
+                p.addPlan(planToAdd);
+            }
+            
+            // Track if this was the selected plan
+            if (plan == selectedPlan) {
+                newSelectedProxy = proxy;
+            }
+        }
+        
+        // Restore selected plan
+        if (newSelectedProxy != null) {
+            p.setSelectedPlan(newSelectedProxy);
+        }
+        
+        return plansToConvert.size();
     }
 
     public static void addNewPlan(Person p, Plan plan, PlanStore store, int iter) {
@@ -89,7 +176,7 @@ public final class OffloadSupport {
         store.putPlan(personId, planId, plan, score, iter, false);
         markPersisted(plan);
 
-        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), iter, plan.getScore());
+        PlanProxy proxy = new PlanProxy(planId, p, store, plan.getType(), plan.getPlanMutator(), iter, plan.getScore());
         p.addPlan(proxy);
     }
 

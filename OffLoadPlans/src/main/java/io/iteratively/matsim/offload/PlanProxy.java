@@ -22,6 +22,7 @@ public final class PlanProxy implements Plan {
     // Cached values - work without materialization
     private Double score;
     private String type;
+    private String planMutator;
 
     private Plan materializedPlan;
     private long materializationTimestamp = -1; // Timestamp when plan was materialized
@@ -31,6 +32,7 @@ public final class PlanProxy implements Plan {
         this.person = person;
         this.store = store;
         this.type = header.type;
+        this.planMutator = header.planMutator;
         this.creationIter = header.creationIter;
         // NaN als null behandeln
         this.score = isValidScore(header.score) ? header.score : null;
@@ -38,10 +40,16 @@ public final class PlanProxy implements Plan {
 
     public PlanProxy(String planId, Person person, PlanStore store, String type,
                      int creationIter, Double score) {
+        this(planId, person, store, type, null, creationIter, score);
+    }
+
+    public PlanProxy(String planId, Person person, PlanStore store, String type,
+                     String planMutator, int creationIter, Double score) {
         this.planId = planId;
         this.person = person;
         this.store = store;
         this.type = type;
+        this.planMutator = planMutator;
         this.creationIter = creationIter;
         // NaN als null behandeln
         this.score = isValidScore(score) ? score : null;
@@ -143,18 +151,19 @@ public final class PlanProxy implements Plan {
         throw new UnsupportedOperationException("Cannot change iterationCreated on PlanProxy");
     }
 
-    // --- PlanMutator: delegate to materialized plan or return null ---
+    // --- PlanMutator: works without materialization ---
 
     @Override
     public String getPlanMutator() {
         if (materializedPlan != null) {
             return materializedPlan.getPlanMutator();
         }
-        return null;
+        return planMutator;
     }
 
     @Override
     public void setPlanMutator(String mutator) {
+        this.planMutator = mutator;
         if (materializedPlan != null) {
             materializedPlan.setPlanMutator(mutator);
         }
@@ -208,6 +217,9 @@ public final class PlanProxy implements Plan {
             if (type != null) {
                 materializedPlan.setType(type);
             }
+            if (planMutator != null) {
+                materializedPlan.setPlanMutator(planMutator);
+            }
             materializationTimestamp = System.currentTimeMillis();
         }
     }
@@ -227,6 +239,7 @@ public final class PlanProxy implements Plan {
             // NaN normalisieren beim Dematerialisieren
             this.score = isValidScore(matScore) ? matScore : null;
             this.type = materializedPlan.getType();
+            this.planMutator = materializedPlan.getPlanMutator();
             this.materializedPlan = null;
             this.materializationTimestamp = -1;
         }
