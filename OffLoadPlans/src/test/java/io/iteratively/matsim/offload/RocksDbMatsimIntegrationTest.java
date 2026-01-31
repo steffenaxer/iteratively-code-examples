@@ -385,15 +385,18 @@ public class RocksDbMatsimIntegrationTest {
                     Plan originalPlan = person.getSelectedPlan();
                     String planId = "plan_iter_0_" + i;
                     
+                    // Store the plan
                     store.putPlan(person.getId().toString(), planId, originalPlan, 
                         100.0 + i, 0, true);
                     
-                    if (i % 2 == 0) {
-                        store.commit();
-                    }
+                    // Add PlanProxy to person to prevent it from being deleted during synchronization
+                    PlanProxy proxy = new PlanProxy(planId, person, store, originalPlan.getType(),
+                        0, 100.0 + i, false);
+                    person.addPlan(proxy);
                 }
             }
             
+            // Commit will now not delete the plans because they exist in Person objects as PlanProxy
             store.commit();
             
             for (int i = 0; i < 3; i++) {
