@@ -22,8 +22,9 @@ public final class PlanMaterializationMonitor {
         
         int totalPersons = population.getPersons().size();
         int totalPlans = 0;
-        int materializedPlans = 0;
+        int materializedProxyPlans = 0;
         int proxyPlans = 0;
+        int regularPlans = 0;
         
         for (Person person : population.getPersons().values()) {
             for (Plan plan : person.getPlans()) {
@@ -31,24 +32,26 @@ public final class PlanMaterializationMonitor {
                 if (plan instanceof PlanProxy proxy) {
                     proxyPlans++;
                     if (proxy.isMaterialized()) {
-                        materializedPlans++;
+                        materializedProxyPlans++;
                     }
                 } else {
-                    // Regular plans are considered materialized
-                    materializedPlans++;
+                    // Count regular (non-proxy) plans separately
+                    regularPlans++;
                 }
             }
         }
         
-        // Calculate materialization rate as percentage
-        double materializationRate = totalPlans > 0 
-            ? (100.0 * materializedPlans / totalPlans) 
+        // Calculate materialization rate only for proxy plans
+        // This represents how many proxy plans are currently loaded in memory
+        double materializationRate = proxyPlans > 0 
+            ? (100.0 * materializedProxyPlans / proxyPlans) 
             : 0.0;
         
         stats.put("totalPersons", totalPersons);
         stats.put("totalPlans", totalPlans);
-        stats.put("materializedPlans", materializedPlans);
+        stats.put("materializedPlans", materializedProxyPlans);
         stats.put("proxyPlans", proxyPlans);
+        stats.put("regularPlans", regularPlans);
         stats.put("materializationRate", String.format("%.2f%%", materializationRate));
         
         return stats;
