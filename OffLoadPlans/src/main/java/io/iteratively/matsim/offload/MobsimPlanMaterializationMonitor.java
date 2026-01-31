@@ -52,6 +52,12 @@ public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimSt
     }
     
     private void logMaterializationStats(double simulationTime) {
+        // First, dematerialize non-selected plans to reduce memory footprint (if enabled)
+        if (config.getEnableMobsimDematerialization()) {
+            dematerializeNonSelectedPlans();
+        }
+        
+        // Then collect and log stats
         Map<String, Object> stats = PlanMaterializationMonitor.collectStats(scenario.getPopulation());
         
         // Create JSON object with time-formatted output
@@ -65,6 +71,32 @@ public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimSt
         json.put("materializationRate", stats.get("materializationRate"));
         
         log.info(json.toString());
+    }
+    
+    /**
+     * Dematerializes all non-selected plans to reduce memory footprint during simulation.
+     * Only the selected plan should remain materialized for each person.
+     */
+    private void dematerializeNonSelectedPlans() {
+        int dematerialized = 0;
+        
+        for (var person : scenario.getPopulation().getPersons().values()) {
+            var selectedPlan = person.getSelectedPlan();
+            
+            for (var plan : person.getPlans()) {
+                if (plan instanceof PlanProxy proxy) {
+                    // Only dematerialize if this is not the selected plan and it's currently materialized
+                    if (plan != selectedPlan && proxy.isMaterialized()) {
+                        proxy.dematerialize();
+                        dematerialized++;
+                    }
+                }
+            }
+        }
+        
+        if (dematerialized > 0) {
+            log.debug("Dematerialized {} non-selected plans", dematerialized);
+        }
     }
     
     /**
