@@ -59,9 +59,10 @@ public final class MobsimPlanMaterializationMonitor implements MobsimBeforeSimSt
         json.put("time", formatTime(simulationTime));
         json.put("totalPersons", stats.get("totalPersons"));
         json.put("totalPlans", stats.get("totalPlans"));
-        json.put("materializedPlans", stats.get("materializedPlans"));
-        json.put("materializationRate", stats.get("materializationRate"));
         json.put("proxyPlans", stats.get("proxyPlans"));
+        json.put("materializedPlans", stats.get("materializedPlans"));
+        json.put("regularPlans", stats.get("regularPlans"));
+        json.put("materializationRate", stats.get("materializationRate"));
         
         log.info(json.toString());
     }
