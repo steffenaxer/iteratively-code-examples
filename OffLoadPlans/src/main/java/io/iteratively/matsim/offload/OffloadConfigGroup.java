@@ -12,6 +12,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private static final String ENABLE_MOBSIM_MONITORING = "enableMobsimMonitoring";
     private static final String MOBSIM_MONITORING_INTERVAL_SECONDS = "mobsimMonitoringIntervalSeconds";
     private static final String ENABLE_MOBSIM_DEMATERIALIZATION = "enableMobsimDematerialization";
+    private static final String ENABLE_AFTER_REPLANNING_DEMATERIALIZATION = "enableAfterReplanningDematerialization";
 
     public static final String DB_FILE_NAME = "plans.mapdb";
 
@@ -25,6 +26,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
     private boolean enableMobsimMonitoring = true;
     private double mobsimMonitoringIntervalSeconds = 3600.0;
     private boolean enableMobsimDematerialization = true;
+    private boolean enableAfterReplanningDematerialization = true;
 
     public OffloadConfigGroup() {
         super(GROUP_NAME);
@@ -88,6 +90,16 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         this.enableMobsimDematerialization = enableMobsimDematerialization;
     }
 
+    @StringGetter(ENABLE_AFTER_REPLANNING_DEMATERIALIZATION)
+    public boolean getEnableAfterReplanningDematerialization() {
+        return enableAfterReplanningDematerialization;
+    }
+
+    @StringSetter(ENABLE_AFTER_REPLANNING_DEMATERIALIZATION)
+    public void setEnableAfterReplanningDematerialization(boolean enableAfterReplanningDematerialization) {
+        this.enableAfterReplanningDematerialization = enableAfterReplanningDematerialization;
+    }
+
     @Override
     public Map<String, String> getComments() {
         Map<String, String> comments = super.getComments();
@@ -96,6 +108,7 @@ public final class OffloadConfigGroup extends ReflectiveConfigGroup {
         comments.put(ENABLE_MOBSIM_MONITORING, "Enable monitoring of plan materialization during MobSim (default: true)");
         comments.put(MOBSIM_MONITORING_INTERVAL_SECONDS, "Interval for MobSim monitoring in seconds (default: 3600.0)");
         comments.put(ENABLE_MOBSIM_DEMATERIALIZATION, "Enable dematerialization of non-selected plans during MobSim (default: true)");
+        comments.put(ENABLE_AFTER_REPLANNING_DEMATERIALIZATION, "Enable dematerialization of non-selected plans after replanning (default: true)");
         return comments;
     }
 }
