@@ -5,6 +5,7 @@ import org.matsim.api.core.v01.population.Plan;
 import org.matsim.api.core.v01.population.Population;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class PlanMaterializationMonitor {
@@ -52,7 +53,7 @@ public final class PlanMaterializationMonitor {
         stats.put("materializedPlans", materializedProxyPlans);
         stats.put("proxyPlans", proxyPlans);
         stats.put("regularPlans", regularPlans);
-        stats.put("materializationRate", String.format("%.2f%%", materializationRate));
+        stats.put("materializationRate", String.format(Locale.US, "%.2f%%", materializationRate));
         
         return stats;
     }

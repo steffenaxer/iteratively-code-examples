@@ -19,7 +19,7 @@ import java.net.URL;
  * 
  * This example:
  * 1. Loads a standard MATSim scenario
- * 2. Configures the offload module with MapDB storage
+ * 2. Configures the offload module with RocksDB storage
  * 3. Runs a simulation where plans are kept as lightweight proxies
  * 4. Demonstrates memory-efficient plan management with full selector functionality
  */
@@ -33,7 +33,7 @@ public class OffloadModuleExample {
         // Configure the offload module
         OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
         
-        // Set directory for MapDB storage (will be created if it doesn't exist)
+        // Set directory for RocksDB storage (will be created if it doesn't exist)
         File storeDir = new File("output/planstore");
         offloadConfig.setStoreDirectory(storeDir.getAbsolutePath());
 
@@ -64,9 +64,9 @@ public class OffloadModuleExample {
         controler.run();
 
         System.out.println("\nSimulation completed!");
-        System.out.println("Plan store location: " + new File(storeDir, OffloadConfigGroup.DB_FILE_NAME));
+        System.out.println("Plan store location: " + storeDir.getAbsolutePath());
         
-        // The MapDB file now contains all plans from all iterations
+        // The RocksDB database now contains all plans from all iterations
         // During simulation, all plans were kept as lightweight proxies with:
         // - All plan scores in memory (for proper selection)
         // - Only selected plans fully materialized

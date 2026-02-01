@@ -168,28 +168,18 @@ public class RocksDbMatsimIntegrationTest {
     }
     
     @Test
-    public void testCompareAllStorageBackends() {
+    public void testRocksDbStorageWithMatsim() {
         // Run simulation with RocksDB
-        Scenario rocksDbResult = runSimulationWithConfig("rocksdb", 
-            OffloadConfigGroup.StorageBackend.ROCKSDB, true);
-        
-        // Run simulation with MapDB
-        Scenario mapDbResult = runSimulationWithConfig("mapdb", 
-            OffloadConfigGroup.StorageBackend.MAPDB, true);
+        Scenario rocksDbResult = runSimulationWithConfig("rocksdb", true);
         
         // Run simulation without offload
-        Scenario noOffloadResult = runSimulationWithConfig("no-offload", 
-            null, false);
+        Scenario noOffloadResult = runSimulationWithConfig("no-offload", false);
         
         // Compare results - all should be identical
-        compareScenarioResults(rocksDbResult, mapDbResult, "RocksDB", "MapDB");
         compareScenarioResults(rocksDbResult, noOffloadResult, "RocksDB", "No-Offload");
-        compareScenarioResults(mapDbResult, noOffloadResult, "MapDB", "No-Offload");
     }
     
-    private Scenario runSimulationWithConfig(String subfolder, 
-                                              OffloadConfigGroup.StorageBackend backend, 
-                                              boolean useOffload) {
+    private Scenario runSimulationWithConfig(String subfolder, boolean useOffload) {
         // Create fresh config and scenario for each run
         Config runConfig = ConfigUtils.createConfig();
         runConfig.controller().setFirstIteration(0);
@@ -281,7 +271,6 @@ public class RocksDbMatsimIntegrationTest {
         
         if (useOffload) {
             OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
-            offloadConfig.setStorageBackend(backend);
             offloadConfig.setStoreDirectory(
                 new File(runConfig.controller().getOutputDirectory(), "store").toString());
             runConfig.addModule(offloadConfig);
@@ -365,7 +354,6 @@ public class RocksDbMatsimIntegrationTest {
     @Test
     public void testPopulationWritingWithOffloadedPlans() throws Exception {
         OffloadConfigGroup offloadConfig = new OffloadConfigGroup();
-        offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);
         offloadConfig.setStoreDirectory(new File(utils.getOutputDirectory(), "rocksdb-write-test").toString());
         config.addModule(offloadConfig);
         

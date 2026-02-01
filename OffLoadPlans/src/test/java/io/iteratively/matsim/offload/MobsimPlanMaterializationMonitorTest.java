@@ -121,9 +121,10 @@ public class MobsimPlanMaterializationMonitorTest {
         Population population = scenario.getPopulation();
         PopulationFactory factory = population.getFactory();
         
-        File db = new File(tempDir, "test-plans.mapdb");
+        File rocksDbDir = new File(tempDir, "test-rocksdb");
+        rocksDbDir.mkdirs();
         
-        try (MapDbPlanStore store = new MapDbPlanStore(db, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create a person with 3 proxy plans
             Person person = factory.createPerson(Id.createPersonId("person1"));
             population.addPerson(person);
@@ -135,6 +136,8 @@ public class MobsimPlanMaterializationMonitorTest {
                 plan.addLeg(factory.createLeg("car"));
                 plan.addActivity(factory.createActivityFromCoord("work", new Coord(1000, 500)));
                 plan.setScore(10.0 + i);
+                plan.getAttributes().putAttribute("offloadPlanId", "plan" + i);
+                person.addPlan(plan);
                 store.putPlan("person1", "plan" + i, plan, plan.getScore(), 0, i == 0);
             }
             store.commit();

@@ -80,6 +80,7 @@ public class RocksDbPlanStoreTest {
         plan.addLeg(pf.createLeg("car"));
         plan.addActivity(pf.createActivityFromCoord("work", new Coord(1000, 500)));
         plan.setScore(12.34);
+        plan.getAttributes().putAttribute("offloadPlanId", "plan1");
         person.addPlan(plan);
         person.setSelectedPlan(plan);
         
