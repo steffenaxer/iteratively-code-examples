@@ -75,12 +75,12 @@ public final class AfterReplanningDematerializer implements AfterMobsimListener 
                 
                 // Replace regular plan with proxy in person's plan list
                 int index = person.getPlans().indexOf(regularPlan);
-                person.getPlans().remove(index);
-                person.getPlans().add(index, proxy);
+                person.getPlans().set(index, proxy);
                 
                 // Update selected plan reference if needed
                 if (isSelected) {
                     person.setSelectedPlan(proxy);
+                    selectedPlan = proxy;  // Update our reference too
                 }
                 
                 regularPlansConverted++;
@@ -90,7 +90,7 @@ public final class AfterReplanningDematerializer implements AfterMobsimListener 
             for (Plan plan : person.getPlans()) {
                 if (plan instanceof PlanProxy proxy) {
                     // Only dematerialize if this is not the selected plan and it's currently materialized
-                    if (plan != person.getSelectedPlan() && proxy.isMaterialized()) {
+                    if (plan != selectedPlan && proxy.isMaterialized()) {
                         proxy.dematerialize();
                         dematerialized++;
                     }
