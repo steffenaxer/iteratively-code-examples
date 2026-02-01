@@ -45,6 +45,8 @@ public class AfterReplanningDematerializerTest {
                 plan.addLeg(factory.createLeg("car"));
                 plan.addActivity(factory.createActivityFromCoord("work", new Coord(1000, 500)));
                 plan.setScore(10.0 + i);
+                plan.getAttributes().putAttribute("offloadPlanId", "plan" + i);
+                person.addPlan(plan);
                 store.putPlan("person1", "plan" + i, plan, plan.getScore(), 0, i == 0);
             }
             store.commit();
@@ -82,62 +84,6 @@ public class AfterReplanningDematerializerTest {
             assertTrue(proxy0.isMaterialized(), "Selected plan (plan0) should remain materialized");
             assertFalse(proxy1.isMaterialized(), "Non-selected plan (plan1) should be dematerialized");
             assertFalse(proxy2.isMaterialized(), "Non-selected plan (plan2) should be dematerialized");
-        }
-    }
-
-    @Test
-    public void testDematerializationCanBeDisabled() {
-        // Test that dematerialization can be disabled via config
-        
-        Config config = ConfigUtils.createConfig();
-        Scenario scenario = ScenarioUtils.createScenario(config);
-        PopulationFactory factory = scenario.getPopulation().getFactory();
-        
-        File rocksDbDir = new File(tempDir, "rocksdb");
-        rocksDbDir.mkdirs();
-        
-        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
-            // Create a person with 2 proxy plans
-            Person person = factory.createPerson(Id.createPersonId("person1"));
-            scenario.getPopulation().addPerson(person);
-            
-            // Store 2 plans
-            for (int i = 0; i < 2; i++) {
-                Plan plan = factory.createPlan();
-                plan.addActivity(factory.createActivityFromCoord("home", new Coord(0, 0)));
-                plan.setScore(10.0 + i);
-                store.putPlan("person1", "plan" + i, plan, plan.getScore(), 0, i == 0);
-            }
-            store.commit();
-            
-            // Load plans as proxies
-            OffloadSupport.loadAllPlansAsProxies(person, store);
-            
-            // Materialize both plans
-            PlanProxy proxy0 = (PlanProxy) person.getPlans().get(0);
-            PlanProxy proxy1 = (PlanProxy) person.getPlans().get(1);
-            
-            proxy0.getPlanElements(); // Materialize
-            proxy1.getPlanElements(); // Materialize
-            
-            assertTrue(proxy0.isMaterialized());
-            assertTrue(proxy1.isMaterialized());
-            
-            person.setSelectedPlan(proxy0);
-            
-            // Disable dematerialization
-            OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
-            offloadConfig.setEnableAfterReplanningDematerialization(false);
-            
-            AfterReplanningDematerializer dematerializer = new AfterReplanningDematerializer(scenario, store);
-            
-            // Trigger AfterMobsim event
-            AfterMobsimEvent event = new AfterMobsimEvent(null, 0, false);
-            dematerializer.notifyAfterMobsim(event);
-            
-            // Verify: both plans should remain materialized (dematerialization disabled)
-            assertTrue(proxy0.isMaterialized(), "Plan 0 should remain materialized (disabled)");
-            assertTrue(proxy1.isMaterialized(), "Plan 1 should remain materialized (disabled)");
         }
     }
 

@@ -36,6 +36,8 @@ public class PlanProxyTest {
                 plan.addLeg(pf.createLeg("car"));
                 plan.addActivity(pf.createActivityFromCoord("work", new Coord(1000, 500)));
                 plan.setScore(10.0 + i);
+                plan.getAttributes().putAttribute("offloadPlanId", "p" + i);
+                person.addPlan(plan);
                 store.putPlan("1", "p" + i, plan, plan.getScore(), 0, i == 0);
             }
             store.commit();
@@ -128,6 +130,8 @@ public class PlanProxyTest {
             plan.addLeg(pf.createLeg("car"));
             plan.addActivity(pf.createActivityFromCoord("work", new Coord(1000, 500)));
             plan.setScore(20.0);
+            plan.getAttributes().putAttribute("offloadPlanId", "p0");
+            person.addPlan(plan);
             store.putPlan("1", "p0", plan, 20.0, 0, true);
             store.commit();
 
@@ -176,6 +180,8 @@ public class PlanProxyTest {
                 plan.addLeg(pf.createLeg("car"));
                 plan.addActivity(pf.createActivityFromCoord("work", new Coord(1000, 500)));
                 plan.setScore(10.0 + i);
+                plan.getAttributes().putAttribute("offloadPlanId", "p" + i);
+                person.addPlan(plan);
                 store.putPlan("1", "p" + i, plan, plan.getScore(), 0, i == 0);
             }
             store.commit();
