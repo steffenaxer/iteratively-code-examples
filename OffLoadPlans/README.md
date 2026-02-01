@@ -2,16 +2,17 @@
 
 ## Overview
 
-This module implements memory-efficient plan offloading for MATSim simulations using MapDB persistence and a PlanProxy architecture. The key innovation is keeping ALL plans in memory as lightweight proxies (with scores only), enabling proper plan selection algorithms like ChangeExpBeta while minimizing memory usage.
+This module implements memory-efficient plan offloading for MATSim simulations using RocksDB persistence and a PlanProxy architecture. The key innovation is keeping ALL plans in memory as lightweight proxies (with scores only), enabling proper plan selection algorithms like ChangeExpBeta while minimizing memory usage.
 
 ## Architecture
 
 ### Core Components
 
 1. **PlanProxy** - Lightweight plan wrapper that holds only metadata (score, type, creation iteration)
-2. **MapDbPlanStore** - Persistent storage for plan data using MapDB
+2. **RocksDbPlanStore** - High-performance persistent storage for plan data using RocksDB
 3. **OffloadSupport** - Helper methods for proxy lifecycle management
 4. **OffloadIterationHooks** - Integration with MATSim iteration lifecycle
+5. **AfterReplanningDematerializer** - Converts regular plans to proxies and dematerializes non-selected plans after replanning
 
 ### Key Design Principles
 
@@ -19,6 +20,7 @@ This module implements memory-efficient plan offloading for MATSim simulations u
 - **Lazy materialization**: Full plan data is loaded only when accessing plan elements
 - **Automatic dematerialization**: After persistence, materialized plans are dropped to save memory
 - **Score-based selection**: Plan selectors can work with all plans' scores without materialization
+- **Regular plan conversion**: Any regular (non-proxy) plans created during replanning are automatically converted to proxies and persisted
 
 ## Workflow
 
@@ -85,52 +87,16 @@ OffloadSupport.persistAllMaterialized(person, store, iteration);
 
 ## Performance Optimizations
 
-### Write Performance Optimizations (Latest)
+### RocksDB Storage
 
-The latest version includes several critical optimizations focused on **write performance**:
+RocksDB is a high-performance embedded key-value store optimized for write-heavy workloads:
 
-1. **Elimination of DB Lookups During Flush (BIGGEST IMPROVEMENT)**
-   - Added `creationIterCache` to track creation iterations in memory
-   - **Before**: `planDataMap.get()` called for every plan during flush → thousands of slow DB accesses
-   - **After**: Direct cache lookup → zero DB accesses during flush
-   - **Impact**: Drastically reduces flush time, especially for large batches
-
-2. **Increased Write Buffer**
-   - Buffer size: 50,000 → 100,000 entries
-   - Fewer flush operations = better amortization of flush overhead
-   - Larger batches for MapDB's bulk write operations
-
-3. **Optimized Data Serialization**
-   - New `serializeDirect()` method with pre-allocated buffers
-   - Exact size calculation eliminates buffer resizing
-   - Avoids creating temporary `PlanData` objects during flush
-   - Reduced memory allocations and GC pressure
-
-4. **Pre-Computed Keys**
-   - Keys computed once in `PendingWrite` record
-   - Eliminates repeated string concatenation during flush
-   - Reduces CPU overhead and string allocations
-
-5. **Reduced Lock Contention**
-   - Flush operation moved outside synchronized block
-   - Cache updates use `putIfAbsent` instead of `containsKey + put`
-   - Minimized time in critical sections
-
-6. **Enhanced MapDB Configuration**
-   - Transaction support for consistent batch commits
-   - Moderate initial allocation: 256 MB (reasonable for most use cases)
-   - Moderate increment: 128 MB
-   - Reduces file fragmentation while avoiding excessive memory usage
-
-### MapDB Layer
-
-- **Consolidated PlanData**: Single map instead of 7 separate maps
-- **Bulk writes**: Uses `putAll()` for batch operations
-- **Write buffering**: 100,000 entry buffer before flush (increased from 50,000)
-- **Compression**: `SerializerCompressionWrapper` for plan data
-- **Async writes**: `executorEnable()` for non-blocking persistence
-- **Memory-mapped files**: Fast file I/O
-- **Transaction commits**: Batch commits for consistency
+- **Native C++ implementation** with JNI bindings for maximum performance
+- **LZ4 compression** enabled for efficient storage
+- **Optimized for write-heavy workloads** - ideal for plan persistence
+- **Memory-mapped I/O** for fast file access
+- **Batch writes** for efficient bulk operations
+- **Thread-safe** operations with minimal lock contention
 
 ### Proxy Layer
 
@@ -143,37 +109,21 @@ The latest version includes several critical optimizations focused on **write pe
 
 ```xml
 <module name="offload">
-    <param name="cacheEntries" value="2000" />
     <param name="storeDirectory" value="/path/to/store" />
-    <param name="storageBackend" value="MAPDB" />  <!-- or ROCKSDB -->
 </module>
 ```
 
-### Storage Backend Options
+### Configuration Options
 
-**MapDB** (default):
-- Java-based embedded database
-- Good for moderate-sized simulations
-- Proven stability
-- Optimized with transaction batching
+**storeDirectory**: Directory for the plan store. If null, uses system temp directory.
 
-**RocksDB**:
-- High-performance key-value store from Facebook
-- Better for large-scale simulations
-- Native C++ implementation with JNI bindings
-- LZ4 compression enabled
-- Optimized for write-heavy workloads
-- May offer better performance for very large datasets
+**enableMobsimMonitoring** (default: true): Enable monitoring of plan materialization during MobSim.
 
-Choose RocksDB if:
-- You have millions of plans to store
-- Write performance is critical
-- You need the absolute best throughput
+**mobsimMonitoringIntervalSeconds** (default: 3600.0): Interval for MobSim monitoring in seconds.
 
-Choose MapDB if:
-- You prefer pure Java solution
-- Your simulation is moderate-sized
-- You want simpler deployment (no native libraries)
+**enableMobsimDematerialization** (default: true): Enable dematerialization of non-selected plans during MobSim.
+
+**enableAfterReplanningDematerialization** (default: true): Enable conversion of regular plans to proxies and dematerialization of non-selected plans after replanning.
 
 ## Usage Example
 
@@ -183,8 +133,6 @@ See `OffloadModuleExample.java` in the test sources for a complete working examp
 Config config = ConfigUtils.loadConfig("config.xml");
 OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
 offloadConfig.setStoreDirectory("planstore");
-offloadConfig.setCacheEntries(2000);
-offloadConfig.setStorageBackend(OffloadConfigGroup.StorageBackend.ROCKSDB);  // or MAPDB
 
 Controler controler = new Controler(scenario);
 controler.addOverridingModule(new OffloadModule());
