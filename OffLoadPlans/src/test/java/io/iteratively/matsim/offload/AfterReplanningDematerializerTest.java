@@ -30,9 +30,10 @@ public class AfterReplanningDematerializerTest {
         Scenario scenario = ScenarioUtils.createScenario(config);
         PopulationFactory factory = scenario.getPopulation().getFactory();
         
-        File db = new File(tempDir, "test-plans.mapdb");
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
         
-        try (MapDbPlanStore store = new MapDbPlanStore(db, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create a person with 3 proxy plans
             Person person = factory.createPerson(Id.createPersonId("person1"));
             scenario.getPopulation().addPerson(person);
@@ -71,7 +72,7 @@ public class AfterReplanningDematerializerTest {
             OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
             offloadConfig.setEnableAfterReplanningDematerialization(true);
             
-            AfterReplanningDematerializer dematerializer = new AfterReplanningDematerializer(scenario);
+            AfterReplanningDematerializer dematerializer = new AfterReplanningDematerializer(scenario, store);
             
             // Simulate AfterMobsim event (when replanning happens)
             AfterMobsimEvent event = new AfterMobsimEvent(null, 0, false);
@@ -92,9 +93,10 @@ public class AfterReplanningDematerializerTest {
         Scenario scenario = ScenarioUtils.createScenario(config);
         PopulationFactory factory = scenario.getPopulation().getFactory();
         
-        File db = new File(tempDir, "test-plans.mapdb");
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
         
-        try (MapDbPlanStore store = new MapDbPlanStore(db, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create a person with 2 proxy plans
             Person person = factory.createPerson(Id.createPersonId("person1"));
             scenario.getPopulation().addPerson(person);
@@ -127,7 +129,7 @@ public class AfterReplanningDematerializerTest {
             OffloadConfigGroup offloadConfig = ConfigUtils.addOrGetModule(config, OffloadConfigGroup.class);
             offloadConfig.setEnableAfterReplanningDematerialization(false);
             
-            AfterReplanningDematerializer dematerializer = new AfterReplanningDematerializer(scenario);
+            AfterReplanningDematerializer dematerializer = new AfterReplanningDematerializer(scenario, store);
             
             // Trigger AfterMobsim event
             AfterMobsimEvent event = new AfterMobsimEvent(null, 0, false);

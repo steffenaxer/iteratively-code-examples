@@ -27,8 +27,9 @@ public class PlanProxyTest {
         sc.getPopulation().addPerson(person);
 
         // Create and persist 3 plans with different scores
-        File db = new File(tempDir, "plans.mapdb");
-        try (MapDbPlanStore store = new MapDbPlanStore(db, sc)) {
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
+        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, sc)) {
             for (int i = 0; i < 3; i++) {
                 Plan plan = pf.createPlan();
                 plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
@@ -77,8 +78,9 @@ public class PlanProxyTest {
         PopulationFactory pf = sc.getPopulation().getFactory();
         Person person = pf.createPerson(Id.createPersonId("1"));
 
-        File db = new File(tempDir, "plans.mapdb");
-        try (MapDbPlanStore store = new MapDbPlanStore(db, sc)) {
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
+        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, sc)) {
             Plan plan = pf.createPlan();
             plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
             plan.addLeg(pf.createLeg("car"));
@@ -117,8 +119,9 @@ public class PlanProxyTest {
         Person person = pf.createPerson(Id.createPersonId("1"));
         sc.getPopulation().addPerson(person);
 
-        File db = new File(tempDir, "plans.mapdb");
-        try (MapDbPlanStore store = new MapDbPlanStore(db, sc)) {
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
+        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, sc)) {
             // Create initial plan
             Plan plan = pf.createPlan();
             plan.addActivity(pf.createActivityFromCoord("home", new Coord(0, 0)));
@@ -163,8 +166,9 @@ public class PlanProxyTest {
         Person person = pf.createPerson(Id.createPersonId("1"));
         sc.getPopulation().addPerson(person);
 
-        File db = new File(tempDir, "plans.mapdb");
-        try (MapDbPlanStore store = new MapDbPlanStore(db, sc)) {
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
+        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, sc)) {
             // Create 2 plans
             for (int i = 0; i < 2; i++) {
                 Plan plan = pf.createPlan();

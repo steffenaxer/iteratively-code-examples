@@ -59,32 +59,47 @@ public final class AfterReplanningDematerializer implements AfterMobsimListener 
                 }
             }
             
-            // Convert regular plans to proxies
-            for (Plan regularPlan : regularPlans) {
-                String personId = person.getId().toString();
-                String planId = OffloadSupport.ensurePlanId(regularPlan);
-                double score = OffloadSupport.toStorableScore(regularPlan.getScore());
-                boolean isSelected = (regularPlan == selectedPlan);
-                
-                // Persist the regular plan
-                store.putPlan(personId, planId, regularPlan, score, iter, isSelected);
-                
-                // Create a proxy for this plan
-                PlanProxy proxy = new PlanProxy(planId, person, store, 
-                    regularPlan.getType(), iter, score, isSelected);
-                
-                // Replace regular plan with proxy in person's plan list
-                // MATSim's Person.getPlans() returns an unmodifiable list, so we need to use removePlan/addPlan
-                person.removePlan(regularPlan);
-                person.addPlan(proxy);
-                
-                // Update selected plan reference if needed
-                if (isSelected) {
-                    person.setSelectedPlan(proxy);
-                    selectedPlan = proxy;  // Update our reference too
+            // Convert regular plans to proxies while maintaining order
+            // We need to rebuild the plan list to maintain indices
+            List<Plan> allPlans = new ArrayList<>(person.getPlans());
+            for (int i = 0; i < allPlans.size(); i++) {
+                Plan plan = allPlans.get(i);
+                if (!(plan instanceof PlanProxy)) {
+                    // This is a regular plan that needs to be converted
+                    String personId = person.getId().toString();
+                    String planId = OffloadSupport.ensurePlanId(plan);
+                    double score = OffloadSupport.toStorableScore(plan.getScore());
+                    boolean isSelected = (plan == selectedPlan);
+                    
+                    // Persist the regular plan
+                    store.putPlan(personId, planId, plan, score, iter, isSelected);
+                    
+                    // Create a proxy for this plan
+                    PlanProxy proxy = new PlanProxy(planId, person, store, 
+                        plan.getType(), iter, score, isSelected);
+                    
+                    // Replace in the list (maintain same index)
+                    allPlans.set(i, proxy);
+                    
+                    // Update selected plan reference if needed
+                    if (isSelected) {
+                        selectedPlan = proxy;
+                    }
+                    
+                    regularPlansConverted++;
                 }
-                
-                regularPlansConverted++;
+            }
+            
+            // Rebuild person's plan list if we converted any plans
+            if (regularPlansConverted > 0) {
+                person.getPlans().clear();
+                for (Plan plan : allPlans) {
+                    person.addPlan(plan);
+                }
+                // Restore selected plan
+                if (selectedPlan != null) {
+                    person.setSelectedPlan(selectedPlan);
+                }
             }
             
             // Second pass: dematerialize non-selected proxy plans

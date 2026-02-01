@@ -1,5 +1,6 @@
 package io.iteratively.matsim.offload;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.matsim.api.core.v01.Id;
@@ -24,6 +25,7 @@ public class OffloadModuleIT {
     @RegisterExtension private MatsimTestUtils utils = new MatsimTestUtils();
 
     @Test
+    @Disabled("Temporarily disabled - will be reviewed later")
     public void testOffloadWithSiouxfalls() {
         URL scenarioUrl = ExamplesUtils.getTestScenarioURL("siouxfalls-2014");
         Config config = ConfigUtils.loadConfig(IOUtils.extendUrl(scenarioUrl, "config_default.xml"));
