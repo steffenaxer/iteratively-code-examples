@@ -123,7 +123,7 @@ public class MobsimPlanMaterializationMonitorTest {
         
         File db = new File(tempDir, "test-rocksdb");
         
-        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create a person with 3 proxy plans
             Person person = factory.createPerson(Id.createPersonId("person1"));
             population.addPerson(person);

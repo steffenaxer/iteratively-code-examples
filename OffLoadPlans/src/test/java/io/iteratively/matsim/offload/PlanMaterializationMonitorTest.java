@@ -104,7 +104,7 @@ public class PlanMaterializationMonitorTest {
         
         File db = new File(tempDir, "test-rocksdb");
         
-        try (MapDbPlanStore store = new MapDbPlanStore(rocksDbDir, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create 2 persons:
             // Person 1: 2 regular plans
             Person person1 = factory.createPerson(Id.createPersonId("person1"));
