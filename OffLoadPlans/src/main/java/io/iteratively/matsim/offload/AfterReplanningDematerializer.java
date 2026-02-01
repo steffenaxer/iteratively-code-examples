@@ -74,8 +74,9 @@ public final class AfterReplanningDematerializer implements AfterMobsimListener 
                     regularPlan.getType(), iter, score, isSelected);
                 
                 // Replace regular plan with proxy in person's plan list
-                int index = person.getPlans().indexOf(regularPlan);
-                person.getPlans().set(index, proxy);
+                // MATSim's Person.getPlans() returns an unmodifiable list, so we need to use removePlan/addPlan
+                person.removePlan(regularPlan);
+                person.addPlan(proxy);
                 
                 // Update selected plan reference if needed
                 if (isSelected) {
