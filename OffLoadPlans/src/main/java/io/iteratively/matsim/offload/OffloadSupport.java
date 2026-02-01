@@ -157,7 +157,14 @@ public final class OffloadSupport {
         return hash;
     }
 
-    private static String ensurePlanId(Plan plan) {
+    /**
+     * Ensures a plan has a unique planId attribute.
+     * If the plan doesn't have one, generates and assigns a new unique ID.
+     * 
+     * @param plan the plan to ensure has an ID
+     * @return the planId of the plan
+     */
+    public static String ensurePlanId(Plan plan) {
         Object attr = plan.getAttributes().getAttribute("offloadPlanId");
         if (attr instanceof String s) return s;
         String pid = "p" + System.nanoTime() + "_" + Math.abs(plan.hashCode());

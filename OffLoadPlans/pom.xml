@@ -48,13 +48,6 @@
             <version>0.10.3</version>
         </dependency>
 
-        <!-- MapDB -->
-        <dependency>
-            <groupId>org.mapdb</groupId>
-            <artifactId>mapdb</artifactId>
-            <version>3.1.0</version>
-        </dependency>
-
         <!-- RocksDB -->
         <dependency>
             <groupId>org.rocksdb</groupId>
