@@ -212,7 +212,7 @@ Only plans with changed hashes are persisted.
 
 ### Thread Safety
 
-- MapDB operations are thread-safe
+- RocksDB operations are thread-safe
 - Write buffering uses synchronized blocks
 - Parallel serialization but sequential DB writes
 
