@@ -37,7 +37,7 @@ The test includes two test methods:
 - Uses the `MaterializationValidator` listener to check constraints at every iteration
 - Verifies:
   - ✅ Simulation completes successfully
-  - ✅ MapDB file is created and contains data
+  - ✅ RocksDB directory is created and contains data
   - ✅ At iteration start: at most 1 plan materialized per person
   - ✅ At iteration end: 0 plans materialized per person
 
@@ -120,6 +120,6 @@ The test passes when:
 - ✅ No assertion failures
 - ✅ Maximum materialized plans per person = 1
 - ✅ Plans dematerialized to 0 at each iteration end
-- ✅ MapDB file created with data
+- ✅ RocksDB directory created with data
 
 This validates that the PlanProxy architecture successfully maintains memory efficiency while providing full plan selector functionality.

@@ -102,9 +102,10 @@ public class PlanMaterializationMonitorTest {
         Population population = scenario.getPopulation();
         PopulationFactory factory = population.getFactory();
         
-        File db = new File(tempDir, "test-plans.mapdb");
+        File rocksDbDir = new File(tempDir, "test-rocksdb");
+        rocksDbDir.mkdirs();
         
-        try (MapDbPlanStore store = new MapDbPlanStore(db, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create 2 persons:
             // Person 1: 2 regular plans
             Person person1 = factory.createPerson(Id.createPersonId("person1"));

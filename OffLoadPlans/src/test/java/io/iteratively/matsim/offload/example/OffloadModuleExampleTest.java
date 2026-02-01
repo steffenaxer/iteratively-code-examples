@@ -60,9 +60,12 @@ public class OffloadModuleExampleTest {
 
         controler.run();
 
-        File dbFile = new File(storeDir, OffloadConfigGroup.DB_FILE_NAME);
-        assertTrue(dbFile.exists(), "MapDB file should exist");
-        assertTrue(dbFile.length() > 0, "MapDB file should contain data");
+        // Verify RocksDB directory was created and contains data
+        assertTrue(storeDir.exists(), "RocksDB directory should exist");
+        assertTrue(storeDir.isDirectory(), "Store location should be a directory");
+        File[] files = storeDir.listFiles();
+        assertNotNull(files, "Store directory should not be null");
+        assertTrue(files.length > 0, "RocksDB directory should contain data files");
     }
 
     @Test

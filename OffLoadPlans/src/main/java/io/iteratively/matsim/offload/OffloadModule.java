@@ -39,16 +39,9 @@ public final class OffloadModule extends AbstractModule {
         }
         baseDir.mkdirs();
 
-        return switch (offloadConfig.getStorageBackend()) {
-            case MAPDB -> {
-                File dbFile = new File(baseDir, OffloadConfigGroup.DB_FILE_NAME);
-                yield new MapDbPlanStore(dbFile, scenario);
-            }
-            case ROCKSDB -> {
-                File rocksDir = new File(baseDir, "rocksdb");
-                rocksDir.mkdirs();
-                yield new RocksDbPlanStore(rocksDir, scenario);
-            }
-        };
+        // Only RocksDB is supported now
+        File rocksDir = new File(baseDir, "rocksdb");
+        rocksDir.mkdirs();
+        return new RocksDbPlanStore(rocksDir, scenario);
     }
 }

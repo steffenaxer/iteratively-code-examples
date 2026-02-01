@@ -2,6 +2,7 @@
 package io.iteratively.matsim.offload;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.matsim.api.core.v01.Scenario;
 import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.Id;
@@ -14,6 +15,10 @@ import java.io.File;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class FuryRoundtripTest {
+    
+    @TempDir
+    File tempDir;
+    
     @Test
     public void roundtrip() throws Exception {
         Scenario sc = ScenarioUtils.createScenario(ConfigUtils.createConfig());
@@ -29,8 +34,9 @@ public class FuryRoundtripTest {
         person.addPlan(plan);
         person.setSelectedPlan(plan);
 
-        File db = new File("target/plans.mapdb");
-        MapDbPlanStore store = new MapDbPlanStore(db, sc);
+        File rocksDbDir = new File(tempDir, "rocksdb");
+        rocksDbDir.mkdirs();
+        RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, sc);
         store.putPlan("1", "p0", plan, plan.getScore(), 0, true);
 
         var proxies = store.listPlanProxies(person);

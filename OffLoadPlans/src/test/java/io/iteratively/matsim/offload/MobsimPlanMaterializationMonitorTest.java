@@ -121,9 +121,10 @@ public class MobsimPlanMaterializationMonitorTest {
         Population population = scenario.getPopulation();
         PopulationFactory factory = population.getFactory();
         
-        File db = new File(tempDir, "test-plans.mapdb");
+        File rocksDbDir = new File(tempDir, "test-rocksdb");
+        rocksDbDir.mkdirs();
         
-        try (MapDbPlanStore store = new MapDbPlanStore(db, scenario)) {
+        try (RocksDbPlanStore store = new RocksDbPlanStore(rocksDbDir, scenario)) {
             // Create a person with 3 proxy plans
             Person person = factory.createPerson(Id.createPersonId("person1"));
             population.addPerson(person);

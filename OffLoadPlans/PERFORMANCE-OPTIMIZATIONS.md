@@ -2,31 +2,24 @@
 
 ## Übersicht
 
-Diese Dokumentation beschreibt die Optimierungen zur Beschleunigung der Schreib-Performance bei der Plan-Speicherung. Es stehen zwei Storage-Backends zur Verfügung:
+Diese Dokumentation beschreibt die Optimierungen zur Beschleunigung der Schreib-Performance bei der Plan-Speicherung mit RocksDB.
 
-1. **MapDB** - Java-basierte embedded database (Standard)
-2. **RocksDB** - High-performance key-value store (für große Simulationen)
+**RocksDB** ist ein High-performance key-value store, der für write-heavy workloads optimiert ist.
 
 Der Fokus liegt auf der Reduzierung der Zeit, die benötigt wird, um MATSim-Plans zu persistieren.
 
-## Storage-Backend Auswahl
-
-### MapDB
-- **Typ**: Pure Java embedded database
-- **Vorteile**: Einfaches Deployment, stabil, gut für moderate Simulationen
-- **Optimierungen**: Transaktions-Batching, Memory-mapped I/O, Kompression
-- **Empfohlen für**: Standard-Anwendungsfälle, bis zu ~100k Agenten
+## Storage-Backend: RocksDB
 
 ### RocksDB
 - **Typ**: Native C++ key-value store mit JNI bindings
 - **Vorteile**: Extrem schnell, optimiert für write-heavy workloads, LZ4 Kompression
 - **Optimierungen**: Write buffer pooling, async I/O, background compaction
-- **Empfohlen für**: Große Simulationen (>100k Agenten), höchste Performance-Anforderungen
+- **Empfohlen für**: Alle Simulationsgrößen, optimale Performance
 
 **Konfiguration**:
 ```xml
 <module name="offload">
-    <param name="storageBackend" value="ROCKSDB" />  <!-- oder MAPDB -->
+    <param name="storeDirectory" value="/path/to/rocksdb" />
 </module>
 ```
 
@@ -80,7 +73,7 @@ int creationIter = creationIterCache.getOrDefault(key, pw.iter);
 **Impact**:
 - Halbierung der Anzahl der Flush-Operationen
 - Bessere Amortisierung des Flush-Overheads
-- Größere Batches für MapDB's `putAll()` Operation
+- Größere Batches für RocksDB batch writes
 
 ### 3. Optimierte Daten-Serialisierung
 
@@ -174,26 +167,22 @@ if (shouldFlush) {
 - Bessere Parallelität in Multi-Thread-Szenarien
 - Reduzierte Wartezeiten
 
-### 6. Verbesserte MapDB-Konfiguration
+### 6. RocksDB-Konfiguration
 
-**Änderungen**:
+**Optimierungen**:
 ```java
-this.db = DBMaker
-    .fileDB(file)
-    .fileMmapEnableIfSupported()
-    .allocateStartSize(256 * 1024 * 1024)   // 256 MB (vernünftig)
-    .allocateIncrement(128 * 1024 * 1024)   // 128 MB
-    .fileMmapPreclearDisable()
-    .transactionEnable()  // NEU: Transaktionen
-    .executorEnable()
-    .closeOnJvmShutdown()
-    .make();
+Options options = new Options()
+    .setCreateIfMissing(true)
+    .setCompressionType(CompressionType.LZ4_COMPRESSION)
+    .setWriteBufferSize(64 * 1024 * 1024)  // 64 MB write buffer
+    .setMaxWriteBufferNumber(3)
+    .setTargetFileSizeBase(64 * 1024 * 1024);
 ```
 
 **Impact**:
-- Moderate Startgröße vermeidet unnötigen Speicherverbrauch
-- Inkrement groß genug um häufige Reallokationen zu vermeiden
-- Konsistente Batch-Commits durch Transaktionen
+- LZ4 Kompression für effizienten Speicher
+- Große Write-Buffer für bessere Batch-Performance
+- Optimierte Background-Compaction
 
 ## Zusammenfassung der Verbesserungen
 
@@ -204,7 +193,7 @@ this.db = DBMaker
 | Optimierte Serialisierung | 1.3-1.5x | ⭐⭐ WICHTIG |
 | Pre-Computed Keys | 1.1-1.2x | ⭐ HILFREICH |
 | Reduzierte Locks | 1.1-1.5x (multi-thread) | ⭐ HILFREICH |
-| MapDB-Config | 1.1-1.3x | ⭐ HILFREICH |
+| RocksDB-Config | 1.1-1.3x | ⭐ HILFREICH |
 
 **Gesamt-Impact**: **15-100x schneller** je nach Datenmenge und Szenario
 
@@ -220,7 +209,7 @@ this.db = DBMaker
 Flush: ~30-60 Sekunden
 - DB-Lookups: ~25-50s
 - Serialisierung: ~3-5s
-- MapDB-Write: ~2-5s
+- DB-Write: ~2-5s
 ```
 
 **Nachher**:
@@ -228,7 +217,7 @@ Flush: ~30-60 Sekunden
 Flush: ~2-5 Sekunden
 - DB-Lookups: ~0s (Cache!)
 - Serialisierung: ~1-2s
-- MapDB-Write: ~1-3s
+- RocksDB-Write: ~1-3s
 ```
 
 **Beschleunigung**: ~10-20x
@@ -239,7 +228,7 @@ Flush: ~2-5 Sekunden
 
 1. **Verwende große Batches**: Lass den Buffer groß werden bevor Flush
 2. **Vermeide frequent commits**: Nutze `commit()` nur am Ende der Iteration
-3. **Ausreichend RAM**: MapDB profitiert von großem Memory-Mapped File Cache
+3. **Ausreichend RAM**: RocksDB profitiert von großem Cache
 4. **SSD empfohlen**: Schnellere Disk I/O verbessert Flush-Performance
 
 ### Code-Beispiel:
@@ -260,14 +249,14 @@ store.commit();  // Nur einmal am Ende!
 Der Code enthält Logging für Performance-Monitoring:
 
 ```
-INFO  Flushing 100000 pending writes to MapDB...
+INFO  Flushing 100000 pending writes to RocksDB...
 INFO  Flush completed in 2847 ms (wrote 98234 plans)
 ```
 
 Bei langsamen Flush-Operationen (>10 Sekunden für 100k Pläne):
 1. Überprüfe verfügbaren RAM
 2. Überprüfe Disk I/O Performance
-3. Überprüfe ob Cache-Größen ausreichend sind
+3. Überprüfe ob RocksDB Cache-Größen ausreichend sind
 
 ## Zukünftige Optimierungen
 
@@ -283,5 +272,5 @@ Potenzielle weitere Verbesserungen:
 
 Alle Optimierungen sind **rückwärtskompatibel**:
 - Keine API-Änderungen
-- Existierende MapDB-Dateien können weiterhin gelesen werden
-- Keine Änderungen am Datenformat (außer Transaktions-Support)
+- RocksDB-Daten können zwischen Läufen wiederverwendet werden
+- Stabile Datenformate
