@@ -10,8 +10,6 @@ import java.util.Set;
 public final class OffloadSupport {
     private OffloadSupport() {}
 
-    public record PersistTask(String personId, String planId, byte[] blob, double score) {}
-
     public static boolean isValidScore(Double score) {
         return score != null && !score.isNaN() && !score.isInfinite();
     }
@@ -106,33 +104,6 @@ public final class OffloadSupport {
         p.addPlan(newPlan);
         p.setSelectedPlan(newPlan);
         store.setActivePlanId(personId, newPlanId);
-    }
-
-    public static PersistTask preparePersist(Person p, FuryPlanCodec codec) {
-        Plan sel = p.getSelectedPlan();
-        if (sel == null || !shouldPersist(sel)) return null;
-
-        String personId = p.getId().toString();
-        String planId = ensurePlanId(sel);
-        double score = toStorableScore(sel.getScore());
-        byte[] blob = codec.serialize(sel);
-
-        markPersisted(sel);
-        return new PersistTask(personId, planId, blob, score);
-    }
-
-    public static void persistSelectedIfAny(Person p, PlanStore store, int iter) {
-        Plan sel = p.getSelectedPlan();
-        if (sel == null) return;
-
-        String personId = p.getId().toString();
-        String planId = ensurePlanId(sel);
-        double score = toStorableScore(sel.getScore());
-
-        if (shouldPersist(sel)) {
-            store.putPlan(personId, planId, sel, score, iter, true);
-            markPersisted(sel);
-        }
     }
 
     private static boolean shouldPersist(Plan plan) {
