@@ -80,7 +80,10 @@ public final class ResidualAnalyzer {
             if (Math.abs(globalMoransI(shuffled, cells)) >= Math.abs(observed)) extremeCount++;
         }
         double pValue = (double) extremeCount / numPermutations;
-        LOG.info("Moran's I = {:.4f}, p-value = {:.4f} ({} permutations)", observed, pValue, numPermutations);
+        LOG.info("Moran's I = {}, p-value = {} ({} permutations)",
+                String.format(java.util.Locale.ROOT, "%.4f", observed),
+                String.format(java.util.Locale.ROOT, "%.4f", pValue),
+                numPermutations);
         return pValue;
     }
 
@@ -120,11 +123,12 @@ public final class ResidualAnalyzer {
                 dist2[j] = dx*dx + dy*dy;
             }
             Arrays.sort(indices, (a, b) -> Double.compare(dist2[a], dist2[b]));
-            neighbors[i] = new int[k];
             int cnt = 0;
+            int[] tmp = new int[k];
             for (int j = 0; j < n && cnt < k; j++) {
-                if (indices[j] != fi) neighbors[i][cnt++] = indices[j];
+                if (indices[j] != fi) tmp[cnt++] = indices[j];
             }
+            neighbors[i] = cnt == k ? tmp : Arrays.copyOf(tmp, cnt);
         }
         return neighbors;
     }

@@ -86,9 +86,9 @@ public final class JobEstimatorMain {
         // ── Predict ────────────────────────────────────────────────────────────
         if ("predict".equals(mode) || "all".equals(mode)) {
             Path modelPath = outputDir.resolve("model.ubj");
-            if (!modelPath.toFile().exists()) {
-                LOG.error("Model not found at {}. Run with -Dmode=train first.", modelPath);
-                System.exit(1);
+            Path twoStageMarker = outputDir.resolve("model_twostage.json");
+            if (!modelPath.toFile().exists() && !twoStageMarker.toFile().exists()) {
+                throw new IllegalStateException("Model not found at " + modelPath + ". Run with -Dmode=train first.");
             }
 
             InferencePipeline.Config config = bboxStr != null
@@ -131,10 +131,13 @@ public final class JobEstimatorMain {
         String[] p = s.split(",");
         if (p.length != 4)
             throw new IllegalArgumentException("bbox must be minX,minY,maxX,maxY — got: " + s);
-        return new double[]{
+        double[] b = {
                 Double.parseDouble(p[0]), Double.parseDouble(p[1]),
                 Double.parseDouble(p[2]), Double.parseDouble(p[3])
         };
+        if (b[0] >= b[2] || b[1] >= b[3])
+            throw new IllegalArgumentException("Invalid bbox: min must be < max — got: " + s);
+        return b;
     }
 
     private static String prop(String key, String def) {

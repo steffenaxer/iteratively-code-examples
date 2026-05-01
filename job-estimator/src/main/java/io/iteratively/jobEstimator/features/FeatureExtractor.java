@@ -148,7 +148,7 @@ public final class FeatureExtractor {
         v[FeatureVector.F_BLDG_TOTAL_FLOOR_AREA] = (float) floorArea;
 
         // Building footprint coverage
-        double cellAreaM2 = 62_500.0; // 250m × 250m
+        double cellAreaM2 = cell.getBounds().getWidth() * cell.getBounds().getHeight();
         double footprintArea = (ghslHeightVal > 0 && builtSurface > 0)
                 ? builtSurface
                 : (floorArea > 0 ? floorArea / Math.max(1.0, ghslHeightVal > 0 ? ghslHeightVal / 3.0 : 2.5) : 0);
@@ -220,10 +220,8 @@ public final class FeatureExtractor {
     }
 
     private void computeSpatialContext(List<GridCell> cells) {
-        // Build a spatial lookup: for each cell, find neighbors within ~500m
-        // Use a simple approach: index cells by their grid position
         Map<Long, GridCell> cellMap = new java.util.HashMap<>(cells.size());
-        double cellSize = 250.0; // assumed cell size in meters
+        double cellSize = cells.isEmpty() ? 250.0 : cells.get(0).getBounds().getWidth();
         for (GridCell c : cells) {
             long key = gridKey(c.getCenterX(), c.getCenterY(), cellSize);
             cellMap.put(key, c);

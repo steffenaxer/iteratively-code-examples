@@ -229,7 +229,7 @@ public final class OsmFeatureExtractor {
                 buildings.add(new TaggedGeometry(poly, bldgCat));
                 int levels = parseBuildingLevels(tags, bldgCat);
                 buildingAreas.add(new BuildingGeometry(poly, bldgCat, levels));
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
             return;
         }
 
@@ -239,7 +239,7 @@ public final class OsmFeatureExtractor {
             try {
                 Polygon poly = GF.createPolygon(coords);
                 pois.add(new TaggedGeometry(poly.getCentroid(), poiCat));
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
         }
 
         // Roads — also track node references for intersection detection
@@ -250,7 +250,7 @@ public final class OsmFeatureExtractor {
                 for (WayNode wn : nodes) {
                     roadNodeRefs.merge(wn.getNodeId(), 1, Integer::sum);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
         }
 
         // Land use
@@ -258,7 +258,7 @@ public final class OsmFeatureExtractor {
         if (luCat != null && coords.length >= 4 && coords[0].equals2D(coords[coords.length - 1])) {
             try {
                 landuses.add(new TaggedGeometry(GF.createPolygon(coords), luCat));
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
         }
     }
 
@@ -399,7 +399,7 @@ public final class OsmFeatureExtractor {
                 Geometry clipped = cellPoly.intersection(tg.geom());
                 double lengthDeg = clipped.getLength();
                 result.merge(tg.category(), lengthDeg * metersPerDegree, Double::sum);
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
         }
     }
 
@@ -418,7 +418,7 @@ public final class OsmFeatureExtractor {
                 double areaDeg2 = clipped.getArea();
                 double areaM2   = areaDeg2 * metersPerDegLon * metersPerDegLat;
                 result.merge(tg.category(), areaM2, Double::sum);
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
         }
     }
 
@@ -439,7 +439,7 @@ public final class OsmFeatureExtractor {
                     double areaDeg2 = clipped.getArea();
                     double footprintM2 = areaDeg2 * metersPerDegLon * metersPerDegLat;
                     totalFloorArea += footprintM2 * bg.levels();
-                } catch (Exception ignored) {}
+                } catch (Exception e) { LOG.trace("OSM parse skip: {}", e.getMessage()); }
             }
         }
         result.put(OsmCategory.BUILDING_TOTAL_FLOOR_AREA_M2, totalFloorArea);
