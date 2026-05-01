@@ -30,8 +30,11 @@ import java.nio.file.Path;
  *   # Inference on saved model
  *   mvn exec:java -pl job-estimator -Dmode=predict
  *
- *   # With GHSL building height data
- *   mvn exec:java -pl job-estimator -DghslHeight=data/ghsl/GHS_BUILT_H.tif
+ *   # With all GHSL raster layers (download via job-estimator/download_ghsl.sh)
+ *   mvn exec:java -pl job-estimator \
+ *     -DghslBuilt=data/ghsl/GHS_BUILT_S_E2020_GLOBE_R2023A_4326_3ss_V1_0_R5_C19.tif \
+ *     -DghslHeight=data/ghsl/GHS_BUILT_H_AGBH_E2018_GLOBE_R2023A_4326_3ss_V1_0_R5_C19.tif \
+ *     -DghslPop=data/ghsl/GHS_POP_E2020_GLOBE_R2023A_4326_3ss_V1_0_R5_C19.tif
  * </pre>
  */
 public final class JobEstimatorMain {
@@ -46,7 +49,11 @@ public final class JobEstimatorMain {
                 "data/osm/switzerland-latest.osm.pbf"));
         Path outputDir  = Path.of(prop("output", "output/job-estimator"));
 
+        String ghslBuiltStr  = prop("ghslBuilt", null);
+        String ghslPopStr    = prop("ghslPop", null);
         String ghslHeightStr = prop("ghslHeight", null);
+        Path ghslBuiltPath   = ghslBuiltStr  != null ? Path.of(ghslBuiltStr)  : null;
+        Path ghslPopPath     = ghslPopStr    != null ? Path.of(ghslPopStr)    : null;
         Path ghslHeightPath  = ghslHeightStr != null ? Path.of(ghslHeightStr) : null;
 
         // ── Tuning knobs ───────────────────────────────────────────────────────
@@ -69,7 +76,7 @@ public final class JobEstimatorMain {
                     : io.iteratively.jobEstimator.model.xgboost.HyperparameterSearch.SearchMode.FULL;
             LOG.info("Running hyperparameter tuning (mode={})...", searchMode);
             TrainingPipeline.Config config = buildTrainConfig(statentCsv, osmPbf, outputDir,
-                    ghslHeightPath, crsCode, cellSize, cvBlocks, bboxStr);
+                    ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, cvBlocks, bboxStr);
             new TuningTrainingPipeline(config, serializer, modelType, cvBlocks, searchMode).run();
             return;
         }
@@ -77,7 +84,7 @@ public final class JobEstimatorMain {
         // ── Train ──────────────────────────────────────────────────────────────
         if ("train".equals(mode) || "all".equals(mode)) {
             TrainingPipeline.Config config = buildTrainConfig(statentCsv, osmPbf, outputDir,
-                    ghslHeightPath, crsCode, cellSize, cvBlocks, bboxStr);
+                    ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, cvBlocks, bboxStr);
 
             SpatialModelTrainer trainer = buildTrainer(modelType, rounds);
             new TrainingPipeline(config, trainer, serializer).run();
@@ -92,7 +99,7 @@ public final class JobEstimatorMain {
             }
 
             InferencePipeline.Config config = bboxStr != null
-                    ? inferenceConfig(modelPath, osmPbf, outputDir, ghslHeightPath, crsCode, cellSize, bboxStr)
+                    ? inferenceConfig(modelPath, osmPbf, outputDir, ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, bboxStr)
                     : InferencePipeline.Config.switzerland(modelPath, osmPbf, outputDir);
 
             new InferencePipeline(config, serializer).run();
@@ -108,22 +115,24 @@ public final class JobEstimatorMain {
     }
 
     private static TrainingPipeline.Config buildTrainConfig(
-            Path statent, Path osm, Path out, Path ghslHeight,
+            Path statent, Path osm, Path out,
+            Path ghslBuilt, Path ghslPop, Path ghslHeight,
             String crs, int cellSize, int cvBlocks, String bboxStr) {
         if (bboxStr != null) {
             double[] b = parseBbox(bboxStr);
-            return new TrainingPipeline.Config(statent, osm, null, null, ghslHeight, null,
+            return new TrainingPipeline.Config(statent, osm, ghslBuilt, ghslPop, ghslHeight, null,
                     crs, cellSize, cvBlocks, out, b[0], b[1], b[2], b[3]);
         }
-        return new TrainingPipeline.Config(statent, osm, null, null, ghslHeight, null,
+        return new TrainingPipeline.Config(statent, osm, ghslBuilt, ghslPop, ghslHeight, null,
                 "EPSG:2056", 250, cvBlocks, out, null, null, null, null);
     }
 
     private static InferencePipeline.Config inferenceConfig(
-            Path model, Path osm, Path out, Path ghslHeight,
+            Path model, Path osm, Path out,
+            Path ghslBuilt, Path ghslPop, Path ghslHeight,
             String crs, int cellSize, String bboxStr) {
         double[] b = parseBbox(bboxStr);
-        return new InferencePipeline.Config(model, osm, null, null, ghslHeight, null,
+        return new InferencePipeline.Config(model, osm, ghslBuilt, ghslPop, ghslHeight, null,
                 crs, b[0], b[1], b[2], b[3], cellSize, out);
     }
 

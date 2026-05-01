@@ -7,3 +7,5 @@ src/main/python/env
 /Chicago/target/
 /output/
 /job-estimator/target/
+/data/
+build.log
