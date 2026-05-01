@@ -10,6 +10,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>OffLoadPlans</module>
+        <module>job-estimator</module>
     </modules>
 
     <properties>

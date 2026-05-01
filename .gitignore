@@ -4,3 +4,6 @@
 src/main/python/env
 /OffLoadPlans/target/
 /OffLoadPlans/test/output/
+/Chicago/target/
+/output/
+/job-estimator/target/
