@@ -5,6 +5,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.prep.PreparedGeometry;
+import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.index.strtree.STRtree;
 
 import java.util.ArrayList;
@@ -66,6 +71,34 @@ public final class GridBuilder {
         LOG.info("Built grid: {}×{} = {} cells (cellSize={}m, bbox={})",
                 nCols, nRows, cells.size(), cellSize, bounds);
         return cells;
+    }
+
+    /**
+     * Builds a grid over the envelope of the given geometry, then filters to only
+     * include cells whose center falls within the geometry.
+     *
+     * @param regionGeometry polygon/multipolygon in the target CRS
+     * @param cellSize       cell side length in meters
+     */
+    public List<GridCell> buildGrid(Geometry regionGeometry, int cellSize) {
+        Envelope env = regionGeometry.getEnvelopeInternal();
+        List<GridCell> allCells = buildGrid(env, cellSize);
+
+        PreparedGeometry prepared = PreparedGeometryFactory.prepare(regionGeometry);
+        GeometryFactory gf = new GeometryFactory();
+
+        List<GridCell> filtered = new ArrayList<>();
+        long id = 0;
+        for (GridCell cell : allCells) {
+            Point center = gf.createPoint(new Coordinate(cell.getCenterX(), cell.getCenterY()));
+            if (prepared.contains(center)) {
+                filtered.add(new GridCell(id++, cell.getCenterX(), cell.getCenterY(), cell.getBounds()));
+            }
+        }
+        LOG.info("Region filter: {} → {} cells ({}% inside polygon)",
+                allCells.size(), filtered.size(),
+                allCells.isEmpty() ? 0 : (100 * filtered.size() / allCells.size()));
+        return filtered;
     }
 
     /**

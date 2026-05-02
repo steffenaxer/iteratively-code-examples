@@ -1,5 +1,6 @@
 package io.iteratively.jobEstimator;
 
+import io.iteratively.jobEstimator.grid.GeoJsonRegionReader;
 import io.iteratively.jobEstimator.model.SpatialModelTrainer;
 import io.iteratively.jobEstimator.model.xgboost.*;
 import io.iteratively.jobEstimator.pipeline.InferencePipeline;
@@ -7,6 +8,7 @@ import io.iteratively.jobEstimator.pipeline.TrainingPipeline;
 import io.iteratively.jobEstimator.pipeline.TuningTrainingPipeline;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.locationtech.jts.geom.Envelope;
 
 import java.nio.file.Path;
 
@@ -64,6 +66,7 @@ public final class JobEstimatorMain {
         int    cellSize  = Integer.parseInt(prop("cellSize", "250"));
         String crsCode   = prop("crs", "EPSG:2056");
         String bboxStr   = prop("bbox", null);
+        String regionStr = prop("region", null);
 
         LOG.info("JobEstimatorMain  mode={} model={} rounds={} cvBlocks={}×{}", mode, modelType, rounds, cvBlocks, cvBlocks);
 
@@ -98,9 +101,16 @@ public final class JobEstimatorMain {
                 throw new IllegalStateException("Model not found at " + modelPath + ". Run with -Dmode=train first.");
             }
 
-            InferencePipeline.Config config = bboxStr != null
-                    ? inferenceConfig(modelPath, osmPbf, outputDir, ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, bboxStr)
-                    : InferencePipeline.Config.switzerland(modelPath, osmPbf, outputDir);
+            InferencePipeline.Config config;
+            if (regionStr != null) {
+                config = inferenceConfigFromRegion(modelPath, osmPbf, outputDir,
+                        ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, regionStr);
+            } else if (bboxStr != null) {
+                config = inferenceConfig(modelPath, osmPbf, outputDir,
+                        ghslBuiltPath, ghslPopPath, ghslHeightPath, crsCode, cellSize, bboxStr);
+            } else {
+                config = InferencePipeline.Config.switzerland(modelPath, osmPbf, outputDir);
+            }
 
             new InferencePipeline(config, serializer).run();
         }
@@ -134,6 +144,18 @@ public final class JobEstimatorMain {
         double[] b = parseBbox(bboxStr);
         return new InferencePipeline.Config(model, osm, ghslBuilt, ghslPop, ghslHeight, null,
                 crs, b[0], b[1], b[2], b[3], cellSize, out);
+    }
+
+    private static InferencePipeline.Config inferenceConfigFromRegion(
+            Path model, Path osm, Path out,
+            Path ghslBuilt, Path ghslPop, Path ghslHeight,
+            String crs, int cellSize, String regionPath) throws Exception {
+        GeoJsonRegionReader reader = new GeoJsonRegionReader();
+        GeoJsonRegionReader.RegionResult region = reader.read(Path.of(regionPath), crs);
+        Envelope env = region.envelope();
+        return new InferencePipeline.Config(model, osm, ghslBuilt, ghslPop, ghslHeight, null,
+                crs, env.getMinX(), env.getMinY(), env.getMaxX(), env.getMaxY(),
+                cellSize, out, region.geometry());
     }
 
     private static double[] parseBbox(String s) {

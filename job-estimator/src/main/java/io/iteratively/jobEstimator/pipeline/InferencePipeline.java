@@ -11,6 +11,7 @@ import io.iteratively.jobEstimator.output.GeoJsonPredictionWriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.geom.Geometry;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -54,8 +55,19 @@ public final class InferencePipeline {
             double bboxMinX, double bboxMinY,
             double bboxMaxX, double bboxMaxY,
             int cellSizeMeters,
-            Path outputDir
+            Path outputDir,
+            Geometry regionGeometry
     ) {
+        public Config(Path modelPath, Path osmPbfPath,
+                      Path ghslBuiltTiffPath, Path ghslPopTiffPath, Path ghslHeightTiffPath,
+                      Path worldPopTiffPath, String sourceCrsCode,
+                      double bboxMinX, double bboxMinY, double bboxMaxX, double bboxMaxY,
+                      int cellSizeMeters, Path outputDir) {
+            this(modelPath, osmPbfPath, ghslBuiltTiffPath, ghslPopTiffPath, ghslHeightTiffPath,
+                    worldPopTiffPath, sourceCrsCode, bboxMinX, bboxMinY, bboxMaxX, bboxMaxY,
+                    cellSizeMeters, outputDir, null);
+        }
+
         /** Full Switzerland bounding box in LV95 (EPSG:2056). */
         public static Config switzerland(Path modelPath, Path osmPbf, Path outputDir) {
             return new Config(modelPath, osmPbf, null, null, null, null,
@@ -90,10 +102,16 @@ public final class InferencePipeline {
         // 1. Load model
         try (SpatialRegressionModel model = serializer.load(config.modelPath())) {
 
-            // 2. Build inference grid
-            Envelope bbox = new Envelope(config.bboxMinX(), config.bboxMaxX(),
-                                         config.bboxMinY(), config.bboxMaxY());
-            List<GridCell> cells = new GridBuilder().buildGrid(bbox, config.cellSizeMeters());
+            // 2. Build inference grid (optionally clipped to region polygon)
+            GridBuilder gridBuilder = new GridBuilder();
+            List<GridCell> cells;
+            if (config.regionGeometry() != null) {
+                cells = gridBuilder.buildGrid(config.regionGeometry(), config.cellSizeMeters());
+            } else {
+                Envelope bbox = new Envelope(config.bboxMinX(), config.bboxMaxX(),
+                        config.bboxMinY(), config.bboxMaxY());
+                cells = gridBuilder.buildGrid(bbox, config.cellSizeMeters());
+            }
             LOG.info("Inference grid: {} cells", cells.size());
 
             // 3. Extract features
