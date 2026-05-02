@@ -56,7 +56,8 @@ public final class InferencePipeline {
             double bboxMaxX, double bboxMaxY,
             int cellSizeMeters,
             Path outputDir,
-            Geometry regionGeometry
+            Geometry regionGeometry,
+            Double targetEmployment
     ) {
         public Config(Path modelPath, Path osmPbfPath,
                       Path ghslBuiltTiffPath, Path ghslPopTiffPath, Path ghslHeightTiffPath,
@@ -65,7 +66,17 @@ public final class InferencePipeline {
                       int cellSizeMeters, Path outputDir) {
             this(modelPath, osmPbfPath, ghslBuiltTiffPath, ghslPopTiffPath, ghslHeightTiffPath,
                     worldPopTiffPath, sourceCrsCode, bboxMinX, bboxMinY, bboxMaxX, bboxMaxY,
-                    cellSizeMeters, outputDir, null);
+                    cellSizeMeters, outputDir, null, null);
+        }
+
+        public Config(Path modelPath, Path osmPbfPath,
+                      Path ghslBuiltTiffPath, Path ghslPopTiffPath, Path ghslHeightTiffPath,
+                      Path worldPopTiffPath, String sourceCrsCode,
+                      double bboxMinX, double bboxMinY, double bboxMaxX, double bboxMaxY,
+                      int cellSizeMeters, Path outputDir, Geometry regionGeometry) {
+            this(modelPath, osmPbfPath, ghslBuiltTiffPath, ghslPopTiffPath, ghslHeightTiffPath,
+                    worldPopTiffPath, sourceCrsCode, bboxMinX, bboxMinY, bboxMaxX, bboxMaxY,
+                    cellSizeMeters, outputDir, regionGeometry, null);
         }
 
         /** Full Switzerland bounding box in LV95 (EPSG:2056). */
@@ -138,7 +149,12 @@ public final class InferencePipeline {
             float[] predictions = model.predict(features);
             LOG.info("Predictions generated for {} cells", predictions.length);
 
-            // 5. Write outputs
+            // 5. Calibrate to target employment (Eurostat marginal total)
+            if (config.targetEmployment() != null) {
+                calibrate(predictions, config.targetEmployment());
+            }
+
+            // 6. Write outputs
             Files.createDirectories(config.outputDir());
             new GeoJsonPredictionWriter(config.sourceCrsCode())
                     .write(config.outputDir().resolve("predicted_jobs.geojson"), cells, predictions);
@@ -146,6 +162,21 @@ public final class InferencePipeline {
         }
 
         LOG.info("InferencePipeline complete in {}s", (System.currentTimeMillis() - startMs) / 1000);
+    }
+
+    private void calibrate(float[] predictions, double targetTotal) {
+        double rawSum = 0;
+        for (float p : predictions) rawSum += p;
+        if (rawSum <= 0) {
+            LOG.warn("Cannot calibrate: raw prediction sum is 0");
+            return;
+        }
+        double factor = targetTotal / rawSum;
+        for (int i = 0; i < predictions.length; i++) {
+            predictions[i] = (float) (predictions[i] * factor);
+        }
+        LOG.info("Calibrated predictions: factor={} (raw sum={}, target={})",
+                String.format("%.4f", factor), String.format("%.0f", rawSum), String.format("%.0f", targetTotal));
     }
 
     private void writeCsv(List<GridCell> cells, float[] predictions) throws IOException {
